@@ -44,14 +44,12 @@ Otherwise, you need to install the `gym-gridverse` repo to run the gridverse exp
 ### Installing gym-gridverse
 
 To install gym-gridverse, you need to clone the `gym-gridverse` [github repo](https://github.com/abaisero/gym-gridverse.git).
-Because gridverse is in active development, we froze our experiments to a particular commit, which you will have to checkout or else the code may not work.
 Finally, once you have the source code, pip install it into the virtual enviroment.
 This can be done as follows:
 
 ```bash
 git clone git@github.com:abaisero/gym-gridverse.git
 cd gym-gridverse
-git checkout f50d0d20648934e232e335a8258d2f2abba35016
 pip install .
 ```
 
@@ -63,7 +61,7 @@ First, install `rl-parsers` by cloning the [github repo](https://github.com/abai
 ```bash
 git clone git@github.com:abaisero/rl-parsers.git
 cd rl-parsers
-pip install .
+pip install -e .
 ```
 
 ### Installing gym-pomdps

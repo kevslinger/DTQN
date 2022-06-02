@@ -25,6 +25,7 @@ class SoftAttention(nn.Module):
 
 class DARQN(drqn.DRQN):
     """DARQN https://arxiv.org/pdf/1512.01693.pdf"""
+
     def __init__(
         self,
         input_shape: int,
