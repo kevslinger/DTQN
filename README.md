@@ -6,9 +6,7 @@ Our results providence strong evidence indicating a transformer can solve partia
 Our paper is now publicly available on arXiv! 
 You can read it [here](https://arxiv.org/abs/2206.01078).
 
-Please note that we are continuing to work on this repository to extend and improve DTQN.
-As such, the code in this branch may not reflect the code submitted with the original paper.
-We will keep the [paper](https://github.com/kevslinger/DTQN/tree/paper) branch frozen with the code from the original paper, and only update it as needed to fix bugs.
+Please note that we are intending to keep this branch frozen with the code from the original paper, and only update it as needed to fix bugs.
 
 ## Table of Contents
 - [Deep Transformer Q-Networks for Partially Observable Reinforcement Learning](#deep-transformer-q-networks-for-partially-observable-reinforcement-learning)
