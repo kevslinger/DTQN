@@ -3,6 +3,12 @@
 Deep Transformer Q-Network (DTQN) is an extension of [DQN](https://www.nature.com/articles/nature14236) and [DRQN](https://arxiv.org/abs/1507.06527) designed to encode an agent's history effectively for solving partially observable reinforcement learning tasks.
 Our architecture is built from a Transformer Decoder (like [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)).
 Our results providence strong evidence indicating a transformer can solve partially observable domains faster than previous recurrent approaches.
+Our paper is now publicly available on arXiv! 
+You can read it [here](https://arxiv.org/abs/2206.01078).
+
+Please note that we are continuing to work on this repository to extend and improve DTQN.
+As such, the code in this branch may not reflect the code submitted with the original paper.
+We will keep the [paper](https://github.com/kevslinger/DTQN/tree/paper) branch frozen with the code from the original paper, and only update it as needed to fix bugs.
 
 ## Table of Contents
 - [Deep Transformer Q-Networks for Partially Observable Reinforcement Learning](#deep-transformer-q-networks-for-partially-observable-reinforcement-learning)
@@ -143,7 +149,13 @@ To run DTQN without intermediate Q-value prediction, use `--history`.
 
 To cite this paper/code in publications, please use the following bibtex:
 
-```
+```bibtex
+@article{esslinger2022dtqn,
+  title = {Deep Transformer Q-Networks for Partially Observable Reinforcement Learning},
+  author = {Esslinger, Kevin and Platt, Robert and Amato, Christopher},
+  journal= {arXiv preprint arXiv:2206.01078},
+  year = {2022},
+}
 
 ```
 
