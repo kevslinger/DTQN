@@ -171,7 +171,7 @@ def run_experiment(args):
             if args.verbose:
                 curtime = logging_utils.timestamp()
                 print(
-                    f"[ {curtime} ] Eval #{agent.num_evals} Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {(time.time() - start_time / 3600):.2f}"
+                    f"[ {curtime} ] Eval #{agent.num_evals} Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time.time() - start_time) / 3600):.2f}"
                 )
 
         if args.save_policy and not timestep % 50_000:
@@ -213,7 +213,7 @@ if __name__ == "__main__":
         "--model",
         type=str,
         default="DTQN",
-        choices=["DTQN", "DQN", "DRQN", "ADRQN", "DARQN"],
+        choices=["DTQN", "DQN", "DRQN", "ADRQN", "DARQN", "ATTN"],
         help="Network model to use.",
     )
     parser.add_argument(
