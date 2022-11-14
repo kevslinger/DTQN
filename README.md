@@ -15,6 +15,7 @@ Please note that we are intending to keep this branch frozen with the code from 
     - [Creating Environment](#creating-environment)
     - [Installing gym-gridverse](#installing-gym-gridverse)
     - [Installing rl-parsers](#installing-rl-parsers)
+    - [Installing one-to-one](#installing-one-to-one)
     - [Installing gym-pomdps](#installing-gym-pomdps)
   - [Running Experiments](#running-experiments)
     - [Experiment Argument Details](#experiment-argument-details)
@@ -59,7 +60,7 @@ pip install .
 
 ### Installing rl-parsers
 
-If you also wish to run the Hallway and HeavenHell experiments, you will need to install `rl-parsers` and `gym-pomdps`.
+If you also wish to run the Hallway and HeavenHell experiments, you will need to install `rl-parsers`, `one-to-one`, and `gym-pomdps`.
 First, install `rl-parsers` by cloning the [github repo](https://github.com/abaisero/rl-parsers.git) and installing it into your python virtual environment.
 
 ```bash
@@ -68,9 +69,20 @@ cd rl-parsers
 pip install -e .
 ```
 
+### Installing one-to-one
+
+Next, install `one-to-one` by cloning the [github repo](https://github.com/abaisero/one-to-one.git) and installing it into your python virtual environment.
+
+```bash
+git clone git@github.com:abaisero/one-to-one.git
+cd one-to-one
+pip install .
+```
+
+
 ### Installing gym-pomdps
 
-Next, install `gym-pomdps` by cloning the [github repo](https://github.com/abaisero/gym-pomdps.git) and installing it into your python virtual environment.
+Finally, install `gym-pomdps` by cloning the [github repo](https://github.com/abaisero/gym-pomdps.git) and installing it into your python virtual environment.
 
 ```bash
 git clone git@github.com:abaisero/gym-pomdps.git
