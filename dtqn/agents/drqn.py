@@ -1,3 +1,5 @@
+from typing import Tuple
+
 from dtqn.agents.dqn import DqnAgent
 import numpy as np
 from distutils.log import warn
@@ -104,10 +106,10 @@ class DrqnAgent(DqnAgent):
 
         self.history = history
 
-    def prepopulate(self, prepop_steps: int) -> None:
+    def prepopulate(self, prepopulate_steps: int) -> None:
         """Prepopulate the replay buffer with `prepop_steps` of experience"""
         episode_timestep = 0
-        for _ in range(prepop_steps):
+        for _ in range(prepopulate_steps):
             action = self.env.action_space.sample()
             obs, reward, done, info = self.env.step(action)
             obs = np.array([obs]).flatten()
@@ -396,7 +398,7 @@ class DrqnAgent(DqnAgent):
         self.optimizer.step()
         self.num_steps += 1
 
-    def evaluate(self, n_episode: int = 10, render: bool = False) -> None:
+    def evaluate(self, n_episode: int = 10, render: bool = False) -> tuple[float, float, float]:
         """Evaluate the network for n_episodes"""
         # Set networks to eval mode
         self.policy_network.eval()

@@ -5,15 +5,13 @@ from numpy.random import Generator
 import gym
 from gym import spaces
 from typing import Optional
-from pyglet.canvas.xlib import NoSuchDisplayException
+# from pyglet.canvas.xlib import NoSuchDisplayException
 
 # Running on slurm
-try:
-    from gym.utils import pyglet_rendering as visualize
-except NoSuchDisplayException:
-    pass
-except ImportError:
-    pass
+# try:
+#     from gym.utils import pyglet_rendering as visualize
+# except:
+#     pass
 
 
 class CarFlag(gym.Env):
@@ -141,7 +139,7 @@ class CarFlag(gym.Env):
             (pos - self.min_position) * self.scale, self._height(pos) * self.scale
         )
 
-        return self.viewer.render(return_rgb_array=mode == "rgb_array")
+        return self.viewer.render()
 
     def reset(self):
         # Randomize the heaven/hell location

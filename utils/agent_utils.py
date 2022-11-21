@@ -6,9 +6,8 @@ from dtqn.networks.adrqn import ADRQN
 from dtqn.networks.drqn import DRQN
 from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
-import torch.optim as optim
 from dtqn.networks.dtqn import DTQN
-from utils import env_processing, epsilon_anneal
+from utils import env_processing
 import gym
 import torch
 import numpy as np
@@ -35,7 +34,8 @@ def get_agent(
     batch_size: int,
     context_len: int,
     history: bool,
-    total_steps: int,
+    target_update_frequency: int,
+    gamma: float,
     num_heads: int = 1,
     num_layers: int = 1,
     dropout: float = 0.0,
@@ -55,7 +55,7 @@ def get_agent(
     )
 
     def make_model(network_cls):
-        return network_cls(
+        return lambda: network_cls(
             env_obs_length,
             env.action_space.n,
             embed_per_obs_dim,
@@ -66,7 +66,7 @@ def get_agent(
         ).to(device)
 
     def make_dtqn(network_cls):
-        return network_cls(
+        return lambda: network_cls(
             env_obs_length,
             env.action_space.n,
             embed_per_obs_dim,
@@ -80,24 +80,19 @@ def get_agent(
             pos=pos,
             discrete=is_discrete_env,
             vocab_sizes=obs_vocab_size,
+            target_update_frequency=target_update_frequency,
         ).to(device)
 
     if "DTQN" not in model_str:
-        policy_net = make_model(MODEL_MAP[model_str])
-        target_net = make_model(MODEL_MAP[model_str])
+        network_factory = make_model(MODEL_MAP[model_str])
     else:
-        policy_net = make_dtqn(MODEL_MAP[model_str])
-        target_net = make_dtqn(MODEL_MAP[model_str])
-
-    optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
-    epsilon_schedule = epsilon_anneal.LinearAnneal(1.0, 0.1, total_steps // 10)
+        network_factory = make_dtqn(MODEL_MAP[model_str])
 
     if MODEL_MAP[model_str] in (ADRQN,):
         agent = AdrqnAgent(
             env,
             eval_env,
-            policy_net,
-            target_net,
+            network_factory,
             buffer_size,
             optimizer,
             device,
@@ -126,16 +121,14 @@ def get_agent(
         )
     elif MODEL_MAP[model_str] in (DQN,):
         agent = DqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
+            network_factory,
             buffer_size,
-            optimizer,
             device,
             env_obs_length,
-            epsilon_schedule,
+            learning_rate=learning_rate,
             batch_size=batch_size,
+            gamma=gamma,
+            target_update_frequency=target_update_frequency
         )
     elif MODEL_MAP[model_str] in (DTQN,):
         agent = DtqnAgent(
@@ -153,6 +146,5 @@ def get_agent(
             history=history,
         )
     else:
-        print("Cannot find that agent/network. Exiting...")
-        exit(1)
+        return None
     return agent

@@ -2,14 +2,31 @@ import wandb
 import csv
 import os
 from typing import Dict
+from collections import deque
 from datetime import datetime
+
+
+class RunningAverage:
+    def __init__(self, size):
+        self.size = size
+        self.q = deque()
+        self.sum = 0
+
+    def add(self, val):
+        self.q.append(val)
+        self.sum += val
+        if len(self.q) > self.size:
+            self.sum -= self.q.popleft()
+
+    def mean(self):
+        return self.sum / len(self.q)
 
 
 def timestamp():
     return datetime.now().strftime("%B %d, %H:%M:%S")
 
 
-def wandb_init(config, group_keys, **kwargs) -> str:
+def wandb_init(config, group_keys, **kwargs) -> None:
     wandb.init(
         project=config["project_name"],
         group="_".join(

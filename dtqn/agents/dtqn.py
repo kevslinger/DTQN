@@ -100,10 +100,10 @@ class DtqnAgent(DqnAgent):
 
         self.obs_context[self.timestep] = np.array([self.env.reset()]).flatten().copy()
 
-    def prepopulate(self, prepop_steps: int) -> None:
+    def prepopulate(self, prepopulate_steps: int) -> None:
         """Prepopulate the replay buffer with `prepop_steps` of experience"""
         episode_timestep = 0
-        for _ in range(prepop_steps):
+        for _ in range(prepopulate_steps):
             action = self.env.action_space.sample()
             obs, reward, done, info = self.env.step(action)
             obs = np.array([obs]).flatten()

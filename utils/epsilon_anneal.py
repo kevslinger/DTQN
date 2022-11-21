@@ -1,3 +1,11 @@
+class Constant:
+    def __init__(self, start):
+        self.val = start
+
+    def anneal(self):
+        pass
+
+
 class LinearAnneal:
     """Linear Annealing Schedule.
 

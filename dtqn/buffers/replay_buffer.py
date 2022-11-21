@@ -58,7 +58,7 @@ class ReplayBuffer:
 
     def sample(
         self, batch_size: int
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         idxes = [
             random.randint(0, min(self.pos, self.max_size) - 1)
             for _ in range(batch_size)
