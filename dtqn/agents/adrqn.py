@@ -13,49 +13,19 @@ DEFAULT_CONTEXT_LEN = 50
 class AdrqnAgent(DrqnAgent):
     def __init__(
         self,
-        env: gym.Env,
-        eval_env: gym.Env,
-        policy_network,
-        target_network,
+        network_factory,
         buf_size: int,
-        optimizer: torch.optim.Optimizer,
         device: torch.device,
         env_obs_length: int,
-        exp_coef: epsilon_anneal.LinearAnneal,
-        batch_size: int = 32,
-        gamma: float = 0.99,
-        context_len: float = 4,
-        embed_size: float = 64,
-        grad_norm_clip: float = 1.0,
-        history: bool = True,
+        **kwargs
     ):
         super().__init__(
-            env,
-            eval_env,
-            policy_network,
-            target_network,
+            network_factory,
             buf_size,
-            optimizer,
             device,
             env_obs_length,
-            exp_coef,
-            batch_size=batch_size,
-            gamma=gamma,
-            context_len=context_len,
-            embed_size=embed_size,
-            grad_norm_clip=grad_norm_clip,
-            history=history,
+            **kwargs
         )
-        self.zeros_hidden = torch.zeros(
-            1,
-            1,
-            self.policy_network.total_embed_size,
-            dtype=torch.float32,
-            device=self.device,
-            requires_grad=False,
-        )
-
-        self.hidden_states = (self.zeros_hidden.clone(), self.zeros_hidden.clone())
 
         self.last_action = 0
 

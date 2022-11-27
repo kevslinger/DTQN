@@ -20,14 +20,15 @@ class DqnAgent:
             env_obs_length: int,
             learning_rate: float = 0.0003,
             batch_size: int = 32,
+            context_len: int = 50,
             gamma: float = 0.99,
-            context_len: int = 1,
             grad_norm_clip: float = 1.0,
             target_update_frequency: int = 10000,
+            **kwargs,
     ):
-        # Initialize environment & networks
         self.context_len = context_len
-
+        self.env_obs_length = env_obs_length
+        # Initialize environment & networks
         self.policy_network = network_factory()
         self.target_network = network_factory()
         self.target_network.eval()
@@ -75,7 +76,7 @@ class DqnAgent:
         q_values = self.policy_network(torch.as_tensor(current_obs, dtype=torch.float32, device=self.device))
         return torch.argmax(q_values).item()
 
-    def store_transition(self, cur_obs, obs, action, reward, done):
+    def store_transition(self, cur_obs, obs, action, reward, done, timestep):
         self.replay_buffer.store(cur_obs, obs, action, reward, done)
 
     def train(self) -> None:
@@ -112,7 +113,7 @@ class DqnAgent:
             # We use DDQN, so the policy network determines which future actions we'd
             # take, but the target network determines the value of those
             next_obs_qs = self.policy_network(next_obss)
-            argmax = torch.argmax(next_obs_qs, dim=1).unsqueeze(-1)
+            argmax = torch.argmax(next_obs_qs, axis=1).unsqueeze(-1)
             next_obs_q_values = (
                 self.target_network(next_obss).gather(1, argmax).squeeze()
             )
@@ -148,3 +149,6 @@ class DqnAgent:
     def target_update(self) -> None:
         """Hard update where we copy the network parameters from the policy network to the target network"""
         self.target_network.load_state_dict(self.policy_network.state_dict())
+
+    def context_reset(self):
+        pass

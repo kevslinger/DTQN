@@ -2,6 +2,7 @@ import argparse
 import torch
 import wandb
 from random import random
+from time import time
 from utils import agent_utils, env_processing, logging_utils, epsilon_anneal
 from utils.agent_utils import MODEL_MAP
 from utils.random import set_global_seed
@@ -13,6 +14,8 @@ except ImportError:
         "WARNING: ``gym_pomdps`` is not installed. This means you cannot run an experiment with the HeavenHell or "
         "Hallway domain. "
     )
+
+START_TIME = time()
 
 
 def get_args():
@@ -64,7 +67,7 @@ def get_args():
     parser.add_argument(
         "--eval-frequency",
         type=int,
-        default=5_000,
+        default=1_000,
         help="How many timesteps between agent evaluations.",
     )
     parser.add_argument(
@@ -154,17 +157,16 @@ def get_args():
 def evaluate(agent, timestep, env, eval_frequency, eval_episode):
     if timestep % eval_frequency: return
     agent.eval_on()
-    reward, episode_length = 0, 0
     for _ in range(eval_episode):
-        obs, done, timestep, ep_reward = env.reset(), False, 0, 0
+        ep_reward, episode_length = 0, 0
+        obs, done = env.reset(), False
+        agent.context_reset()
         while not done:
-            timestep += 1
+            episode_length += 1
             action = agent.get_action(obs)
             obs, reward, done, info = env.step(action)
             ep_reward += reward
-        reward += ep_reward / eval_episode
-        episode_length += timestep / eval_episode
-        agent.episode_rewards.add(reward)
+        agent.episode_rewards.add(ep_reward)
         agent.episode_lengths.add(episode_length)
 
         wandb.log(
@@ -177,26 +179,31 @@ def evaluate(agent, timestep, env, eval_frequency, eval_episode):
                 "losses/Max_Target_Value": agent.target_max.mean(),
                 "losses/Mean_Target_Value": agent.target_mean.mean(),
                 "losses/Min_Target_Value": agent.target_min.mean(),
-                "results/Return": reward,
-                "results/Mean_Return": agent.episode_rewards.mean(),
-                "results/Episode_Length": episode_length,
-                "results/Mean_Episode_Length": agent.episode_lengths.mean(),
+                "results/Eval_Return": agent.episode_rewards.mean(),
+                "results/Eval_Episode_Length": agent.episode_lengths.mean(),
             },
             timestep,
         )
     agent.eval_off()
+    if not timestep: return
+    t = time() - START_TIME
+    print('{} hours, {} minutes, {} seconds elapsed'.format(t // 3600, t % 3600 // 60, t % 60))
+    t_est = t * 1e6 / timestep
+    print('{} hours, {} minutes, {} seconds per M step'.format(t_est // 3600, t_est % 3600 // 60, t_est % 60))
 
 
 def rollout(agent, env, eval_env, steps, eps, train=True, eval_frequency=5000, eval_episodes=10):
     done, cur_obs = True, None
     for i in range(steps):
-        if done: cur_obs = env.reset()
+        if done:
+            cur_obs = env.reset()
+            agent.context_reset()
         if random() < eps.val:
             action = env.action_space.sample()
         else:
             action = agent.get_action(cur_obs)
         obs, reward, done, _ = env.step(action)
-        agent.store_transition(cur_obs, obs, action, reward, done)
+        agent.store_transition(cur_obs, obs, action, reward, done, i)
         cur_obs = obs
         if eps: eps.anneal()
         if train:
@@ -215,7 +222,6 @@ def run_experiment(args):
     agent = agent_utils.get_agent(
         args.model,
         env,
-        eval_env,
         args.obsembed,
         args.inembed,
         args.buf_size,

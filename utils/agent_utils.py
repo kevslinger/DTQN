@@ -21,11 +21,18 @@ MODEL_MAP = {
     "DQN": DQN,
 }
 
+AGENT_MAP = {
+    "DTQN": DtqnAgent,
+    "ADRQN": AdrqnAgent,
+    "DRQN": DrqnAgent,
+    "DARQN": DrqnAgent,
+    "DQN": DqnAgent,
+}
+
 
 def get_agent(
     model_str: str,
     env: gym.Env,
-    eval_env: gym.Env,
     embed_per_obs_dim: int,
     inner_embed: int,
     buffer_size: int,
@@ -53,6 +60,8 @@ def get_agent(
         env.observation_space,
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
+
+    if model_str == 'DQN': context_len = 1
 
     def make_model(network_cls):
         return lambda: network_cls(
@@ -88,63 +97,18 @@ def get_agent(
     else:
         network_factory = make_dtqn(MODEL_MAP[model_str])
 
-    if MODEL_MAP[model_str] in (ADRQN,):
-        agent = AdrqnAgent(
-            env,
-            eval_env,
-            network_factory,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            embed_size=inner_embed,
-            history=history,
-        )
-    elif MODEL_MAP[model_str] in (DRQN, DARQN):
-        agent = DrqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            embed_size=inner_embed,
-            history=history,
-        )
-    elif MODEL_MAP[model_str] in (DQN,):
-        agent = DqnAgent(
-            network_factory,
-            buffer_size,
-            device,
-            env_obs_length,
-            learning_rate=learning_rate,
-            batch_size=batch_size,
-            gamma=gamma,
-            target_update_frequency=target_update_frequency
-        )
-    elif MODEL_MAP[model_str] in (DTQN,):
-        agent = DtqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            history=history,
-        )
-    else:
-        return None
-    return agent
+    return AGENT_MAP[model_str](
+        network_factory,
+        buffer_size,
+        device,
+        env_obs_length,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        gamma=gamma,
+        context_len=context_len,
+        embed_size=inner_embed,
+        history=history,
+        target_update_frequency=target_update_frequency,
+        obs_mask=env_processing.get_env_obs_mask(env),
+        num_actions=env.action_space.n,
+    )

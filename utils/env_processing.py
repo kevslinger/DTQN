@@ -1,3 +1,6 @@
+from collections import deque
+
+import torch
 import gym
 from gym import spaces
 from gym.wrappers.time_limit import TimeLimit
@@ -32,7 +35,7 @@ class ObsType(Enum):
 
 def get_env_obs_type(obs_space: spaces.Space) -> int:
     if isinstance(
-        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+            obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
     ):
         return ObsType.DISCRETE
     else:
@@ -102,33 +105,44 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
         raise NotImplementedError(f"We do not yet support {env.observation_space}")
 
 
-def add_to_history(history, obs) -> np.ndarray:
-    """Append an observation to the history, and removes the first observation."""
-    if isinstance(obs, np.ndarray):
-        return np.concatenate((history[1:], [obs.copy()]))
-    elif isinstance(obs, (int, float)):
-        return np.concatenate((history[1:], [[obs]]))
-    # hack to get numpy values
-    elif hasattr(obs, "dtype"):
-        return np.concatenate((history[1:], [[obs]]))
-    else:
-        raise ValueError(f"Tried to add to {history} with {obs}, type {obs.dtype}")
+# noinspection PyAttributeOutsideInit
+class Context:
+    def __init__(self, length: int, obs_mask, num_actions, initial_hidden, env_obs_length):
+        self.length = length
+        self.env_obs_length = env_obs_length
+        self.num_actions = num_actions
+        self.obs_mask = obs_mask
+        self.reward_mask = 0
+        self.done_mask = True
+        self.initial_hidden = initial_hidden
+        self.reset()
 
+    def reset(self):
+        self.obs = deque([[self.obs_mask]*self.env_obs_length]*self.length, maxlen=self.length)
+        self.next_obs = deque([[self.obs_mask]*self.env_obs_length]*self.length, maxlen=self.length)
+        self.action = deque([[np.random.randint(self.num_actions)]]*self.length, maxlen=self.length)
+        self.reward = deque([[self.reward_mask]]*self.length, maxlen=self.length)
+        self.done = deque([[self.done_mask]]*self.length, maxlen=self.length)
+        self.hidden = self.initial_hidden
 
-def make_empty_contexts(
-    context_len: int,
-    env_obs_length: int,
-    obs_type: type,
-    obs_mask: int,
-    num_actions: int,
-    reward_mask: float,
-    done_mask: bool,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    obs_context = np.full([context_len, env_obs_length], obs_mask, dtype=obs_type)
-    next_obs_context = np.full([context_len, env_obs_length], obs_mask, dtype=obs_type)
-    action_context = np.full(
-        [context_len, 1], np.random.randint(num_actions), dtype=np.int_
-    )
-    reward_context = np.full([context_len, 1], reward_mask, dtype=np.float32)
-    done_context = np.full([context_len, 1], done_mask, dtype=np.bool_)
-    return obs_context, next_obs_context, action_context, reward_context, done_context
+    def add(self, o, next_o, a, r, done):
+        self.obs.append(o)
+        self.next_obs.append(next_o)
+        self.action.append([a])
+        self.reward.append([r])
+        self.done.append([done])
+
+    def export(self):
+        return (
+            np.array(self.obs),
+            np.array(self.next_obs),
+            np.array(self.action),
+            np.array(self.reward),
+            np.array(self.done),
+        )
+
+    def get_history_of(self, obs):
+        res = self.obs.copy()
+        res.append(obs)
+        return np.array(res)
+

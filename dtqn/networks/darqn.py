@@ -32,9 +32,10 @@ class DARQN(drqn.DRQN):
         n_actions: int,
         embed_per_obs_dim: int,
         inner_embed: int,
-        is_discrete_env: int,
+        is_discrete_env: bool,
         obs_vocab_size: Optional[int] = None,
         batch_size: Optional[int] = None,
+        **kwargs,
     ) -> None:
         super().__init__(
             input_shape=input_shape,
@@ -43,6 +44,7 @@ class DARQN(drqn.DRQN):
             inner_embed=inner_embed,
             is_discrete_env=is_discrete_env,
             obs_vocab_size=obs_vocab_size,
+            **kwargs,
         )
         self.hidden_zeros = nn.Parameter(
             torch.zeros(1, batch_size, inner_embed, dtype=torch.float32),
