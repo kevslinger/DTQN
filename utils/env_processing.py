@@ -141,6 +141,10 @@ class Context:
             np.array(self.done),
         )
 
+    @property
+    def last_action(self):
+        return self.action[-1][0]
+
     def get_history_of(self, obs):
         res = self.obs.copy()
         res.append(obs)

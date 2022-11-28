@@ -2,8 +2,6 @@ import torch
 from dtqn.agents.dqn import DqnAgent
 from utils.env_processing import Context
 
-DEFAULT_CONTEXT_LEN = 50
-
 
 class DrqnAgent(DqnAgent):
     # noinspection PyTypeChecker
@@ -14,7 +12,7 @@ class DrqnAgent(DqnAgent):
         device: torch.device,
         env_obs_length: int,
         context_len: int = 50,
-        embed_size: float = 64,
+        embed_size: int = 64,
         history: bool = True,
         obs_mask: float = 0,
         num_actions: int = 3,
@@ -31,7 +29,7 @@ class DrqnAgent(DqnAgent):
         self.obs_mask = obs_mask
         self.history = history
 
-        zeros_hidden = torch.zeros(
+        self.zeros_hidden = torch.zeros(
             1,
             1,
             embed_size,
@@ -40,7 +38,7 @@ class DrqnAgent(DqnAgent):
             requires_grad=False,
         )
 
-        hidden_states = (zeros_hidden, zeros_hidden)
+        hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
         self.train_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
         self.eval_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
