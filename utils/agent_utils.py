@@ -6,9 +6,8 @@ from dtqn.networks.adrqn import ADRQN
 from dtqn.networks.drqn import DRQN
 from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
-import torch.optim as optim
 from dtqn.networks.dtqn import DTQN
-from utils import env_processing, epsilon_anneal
+from utils import env_processing
 import gym
 import torch
 import numpy as np
@@ -22,11 +21,18 @@ MODEL_MAP = {
     "DQN": DQN,
 }
 
+AGENT_MAP = {
+    "DTQN": DtqnAgent,
+    "ADRQN": AdrqnAgent,
+    "DRQN": DrqnAgent,
+    "DARQN": DrqnAgent,
+    "DQN": DqnAgent,
+}
+
 
 def get_agent(
     model_str: str,
     env: gym.Env,
-    eval_env: gym.Env,
     embed_per_obs_dim: int,
     inner_embed: int,
     buffer_size: int,
@@ -35,7 +41,8 @@ def get_agent(
     batch_size: int,
     context_len: int,
     history: bool,
-    total_steps: int,
+    target_update_frequency: int,
+    gamma: float,
     num_heads: int = 1,
     num_layers: int = 1,
     dropout: float = 0.0,
@@ -54,8 +61,10 @@ def get_agent(
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
 
+    if model_str == 'DQN': context_len = 1
+
     def make_model(network_cls):
-        return network_cls(
+        return lambda: network_cls(
             env_obs_length,
             env.action_space.n,
             embed_per_obs_dim,
@@ -66,7 +75,7 @@ def get_agent(
         ).to(device)
 
     def make_dtqn(network_cls):
-        return network_cls(
+        return lambda: network_cls(
             env_obs_length,
             env.action_space.n,
             embed_per_obs_dim,
@@ -80,79 +89,26 @@ def get_agent(
             pos=pos,
             discrete=is_discrete_env,
             vocab_sizes=obs_vocab_size,
+            target_update_frequency=target_update_frequency,
         ).to(device)
 
     if "DTQN" not in model_str:
-        policy_net = make_model(MODEL_MAP[model_str])
-        target_net = make_model(MODEL_MAP[model_str])
+        network_factory = make_model(MODEL_MAP[model_str])
     else:
-        policy_net = make_dtqn(MODEL_MAP[model_str])
-        target_net = make_dtqn(MODEL_MAP[model_str])
+        network_factory = make_dtqn(MODEL_MAP[model_str])
 
-    optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
-    epsilon_schedule = epsilon_anneal.LinearAnneal(1.0, 0.1, total_steps // 10)
-
-    if MODEL_MAP[model_str] in (ADRQN,):
-        agent = AdrqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            embed_size=inner_embed,
-            history=history,
-        )
-    elif MODEL_MAP[model_str] in (DRQN, DARQN):
-        agent = DrqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            embed_size=inner_embed,
-            history=history,
-        )
-    elif MODEL_MAP[model_str] in (DQN,):
-        agent = DqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-        )
-    elif MODEL_MAP[model_str] in (DTQN,):
-        agent = DtqnAgent(
-            env,
-            eval_env,
-            policy_net,
-            target_net,
-            buffer_size,
-            optimizer,
-            device,
-            env_obs_length,
-            epsilon_schedule,
-            batch_size=batch_size,
-            context_len=context_len,
-            history=history,
-        )
-    else:
-        print("Cannot find that agent/network. Exiting...")
-        exit(1)
-    return agent
+    return AGENT_MAP[model_str](
+        network_factory,
+        buffer_size,
+        device,
+        env_obs_length,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        gamma=gamma,
+        context_len=context_len,
+        embed_size=inner_embed,
+        history=history,
+        target_update_frequency=target_update_frequency,
+        obs_mask=env_processing.get_env_obs_mask(env),
+        num_actions=env.action_space.n,
+    )

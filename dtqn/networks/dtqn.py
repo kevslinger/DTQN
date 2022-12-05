@@ -60,6 +60,7 @@ class DTQN(nn.Module):
         pos: Union[str, int] = 1,
         discrete: bool = False,
         vocab_sizes: Optional[Union[np.ndarray, int]] = None,
+        **kwargs,
     ):
         super().__init__()
         self.obs_dim = obs_dim
@@ -128,12 +129,13 @@ class DTQN(nn.Module):
         self.history_len = history_len
         self.apply(self._init_weights)
 
-    def _init_weights(self, module):
+    @staticmethod
+    def _init_weights(module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.MultiheadAttention)):
+        elif isinstance(module, nn.MultiheadAttention):
             module.in_proj_weight.data.normal_(mean=0.0, std=0.02)
             module.out_proj.weight.data.normal_(mean=0.0, std=0.02)
             module.in_proj_bias.data.zero_()
