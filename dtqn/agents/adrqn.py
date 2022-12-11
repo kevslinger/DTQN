@@ -16,13 +16,7 @@ class AdrqnAgent(DrqnAgent):
         num_actions: int = 3,
         **kwargs
     ):
-        super().__init__(
-            network_factory,
-            buf_size,
-            device,
-            env_obs_length,
-            **kwargs
-        )
+        super().__init__(network_factory, buf_size, device, env_obs_length, **kwargs)
         self.context_len = context_len
         self.obs_mask = obs_mask
         self.history = history
@@ -38,15 +32,15 @@ class AdrqnAgent(DrqnAgent):
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
-        self.train_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
-        self.eval_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
-        self.context = self.train_context
+        self.context = Context(
+            context_len, obs_mask, num_actions, hidden_states, env_obs_length
+        )
 
     @torch.no_grad()
     def get_action(self, current_obs):
         q_values, self.context.hidden = self.policy_network(
             torch.as_tensor(
-                current_obs, dtype=torch.float32, device=self.device
+                current_obs, dtype=self.obs_tensor_type, device=self.device
             ).reshape(1, 1, current_obs.shape[0]),
             torch.as_tensor([[self.context.last_action]], device=self.device),
             hidden_states=self.context.hidden,
@@ -58,6 +52,7 @@ class AdrqnAgent(DrqnAgent):
         if not self.replay_buffer.can_sample(self.batch_size):
             return
 
+        self.eval_off()
         (
             obss,
             actions,
@@ -68,9 +63,9 @@ class AdrqnAgent(DrqnAgent):
         ) = self.replay_buffer.sample(self.batch_size)
 
         # We pull obss/next_obss as [batch-size x context-len x obs-dim]
-        obss = torch.as_tensor(obss, dtype=torch.float32, device=self.device)
+        obss = torch.as_tensor(obss, dtype=self.obs_tensor_type, device=self.device)
         next_obss = torch.as_tensor(
-            next_obss, dtype=torch.float32, device=self.device
+            next_obss, dtype=self.obs_tensor_type, device=self.device
         )
         # Actions starts as [batch-size x context-len x 1]
         actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
@@ -126,7 +121,7 @@ class AdrqnAgent(DrqnAgent):
                 )
                 # here goes BELLMAN
                 targets = rewards.squeeze() + (1 - dones.squeeze()) * (
-                        next_obs_q_values * self.gamma
+                    next_obs_q_values * self.gamma
                 )
             else:
                 # Next obss goes from [batch-size x context-len x obs-len] to
@@ -156,20 +151,20 @@ class AdrqnAgent(DrqnAgent):
 
                 # here goes BELLMAN
                 targets = rewards[:, -1, :].squeeze() + (
-                        1 - dones[:, -1, :].squeeze()
+                    1 - dones[:, -1, :].squeeze()
                 ) * (next_obs_q_values * self.gamma)
 
-        self.qvalue_max.add(q_values.max())
-        self.qvalue_mean.add(q_values.mean())
-        self.qvalue_min.add(q_values.min())
+        self.qvalue_max.add(q_values.max().item())
+        self.qvalue_mean.add(q_values.mean().item())
+        self.qvalue_min.add(q_values.min().item())
 
-        self.target_max.add(targets.max())
-        self.target_mean.add(targets.mean())
-        self.target_min.add(targets.min())
+        self.target_max.add(targets.max().item())
+        self.target_mean.add(targets.mean().item())
+        self.target_min.add(targets.min().item())
 
         # Optimization step
         loss = torch.nn.functional.mse_loss(q_values, targets)
-        self.td_errors.add(loss)
+        self.td_errors.add(loss.item())
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(
@@ -177,6 +172,9 @@ class AdrqnAgent(DrqnAgent):
             self.grad_norm_clip,
             error_if_nonfinite=True,
         )
-        self.grad_norms.add(norm)
+        self.grad_norms.add(norm.item())
         self.optimizer.step()
+        self.num_train_steps += 1
 
+        if self.num_train_steps % self.target_update_frequency == 0:
+            self.target_update()

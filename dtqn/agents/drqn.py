@@ -1,4 +1,10 @@
+from typing import Callable, Union
+
 import torch
+from torch.nn import Module
+import torch.nn.functional as F
+import numpy as np
+
 from dtqn.agents.dqn import DqnAgent
 from utils.env_processing import Context
 
@@ -7,28 +13,40 @@ class DrqnAgent(DqnAgent):
     # noinspection PyTypeChecker
     def __init__(
         self,
-        network_factory,
-        buf_size: int,
+        network_factory: Callable[[], Module],
+        buffer_size: int,
         device: torch.device,
         env_obs_length: int,
+        obs_mask: Union[int, float],
+        num_actions: int,
+        is_discrete_env: bool,
+        learning_rate: float = 0.0003,
+        batch_size: int = 32,
         context_len: int = 50,
+        gamma: float = 0.99,
+        grad_norm_clip: float = 1.0,
+        target_update_frequency: int = 10_000,
         embed_size: int = 64,
         history: bool = True,
-        obs_mask: float = 0,
-        num_actions: int = 3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             network_factory,
-            buf_size,
+            buffer_size,
             device,
             env_obs_length,
-            **kwargs
+            obs_mask,
+            num_actions,
+            is_discrete_env,
+            learning_rate,
+            batch_size,
+            context_len,
+            gamma,
+            grad_norm_clip,
+            target_update_frequency,
+            **kwargs,
         )
-        self.context_len = context_len
-        self.obs_mask = obs_mask
         self.history = history
-
         self.zeros_hidden = torch.zeros(
             1,
             1,
@@ -40,41 +58,34 @@ class DrqnAgent(DqnAgent):
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
-        self.train_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
-        self.eval_context = Context(context_len, obs_mask, num_actions, hidden_states, env_obs_length)
-        self.context = self.train_context
+        self.context = Context(context_len, obs_mask, num_actions, env_obs_length)
+        self.context.update_hidden(hidden_states)
 
-    def context_reset(self):
-        self.context.reset()
-
-    def eval_on(self):
-        self.policy_network.eval()
-        self.context = self.eval_context
-
-    def eval_off(self):
-        self.policy_network.train()
-        self.context = self.train_context
-
+    # TODO: How to interoperate context and pad_packed
     def store_transition(self, cur_obs, obs, action, reward, done, timestep):
         self.context.add(cur_obs, obs, action, reward, done)
         o, o_n, a, r, d = self.context.export()
-        if any(action > 3 for action in a): print(a)
-        self.replay_buffer.store(o, o_n, a, r, d, min(self.context_len, timestep+1))
+        self.replay_buffer.store(o, o_n, a, r, d, min(self.context_len, timestep + 1))
 
     @torch.no_grad()
-    def get_action(self, current_obs):
-        q_values, self.context.hidden = self.policy_network(
+    def get_action(self, context: Context, epsilon=0.0):
+        q_values, hidden = self.policy_network(
             torch.as_tensor(
-                current_obs, dtype=torch.float32, device=self.device
-            ).reshape(1, 1, current_obs.shape[0]),
-            hidden_states=self.context.hidden,
+                context.obs[-1], dtype=self.obs_tensor_type, device=self.device
+            ).reshape(1, 1, self.env_obs_length),
+            hidden_states=context.hidden,
         )
-        return torch.argmax(q_values).item()
+        context.update_hidden(hidden)
+        if np.random.rand() < epsilon:
+            return np.random.randint(self.num_actions)
+        else:
+            return torch.argmax(q_values).item()
 
     def train(self) -> None:
         if not self.replay_buffer.can_sample(self.batch_size):
             return
 
+        self.eval_off()
         (
             obss,
             actions,
@@ -85,9 +96,9 @@ class DrqnAgent(DqnAgent):
         ) = self.replay_buffer.sample(self.batch_size)
 
         # We pull obss/next_obss as [batch-size x context-len x obs-dim]
-        obss = torch.as_tensor(obss, dtype=torch.float32, device=self.device)
+        obss = torch.as_tensor(obss, dtype=self.obs_tensor_type, device=self.device)
         next_obss = torch.as_tensor(
-            next_obss, dtype=torch.float32, device=self.device
+            next_obss, dtype=self.obs_tensor_type, device=self.device
         )
         # Actions starts as [batch-size x context-len x 1]
         actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
@@ -102,7 +113,6 @@ class DrqnAgent(DqnAgent):
         # then q_values is [batch-size x context-len x n-actions]
         q_values, _ = self.policy_network(
             obss, episode_lengths=episode_lengths, padding_value=self.obs_mask
-
         )
 
         if self.history:
@@ -166,17 +176,17 @@ class DrqnAgent(DqnAgent):
                     1 - dones[:, -1, :].squeeze()
                 ) * (next_obs_q_values * self.gamma)
 
-        self.qvalue_max.add(q_values.max())
-        self.qvalue_mean.add(q_values.mean())
-        self.qvalue_min.add(q_values.min())
+        self.qvalue_max.add(q_values.max().item())
+        self.qvalue_mean.add(q_values.mean().item())
+        self.qvalue_min.add(q_values.min().item())
 
-        self.target_max.add(targets.max())
-        self.target_mean.add(targets.mean())
-        self.target_min.add(targets.min())
+        self.target_max.add(targets.max().item())
+        self.target_mean.add(targets.mean().item())
+        self.target_min.add(targets.min().item())
 
         # Optimization step
-        loss = torch.nn.functional.mse_loss(q_values, targets)
-        self.td_errors.add(loss)
+        loss = F.mse_loss(q_values, targets)
+        self.td_errors.add(loss.item())
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(
@@ -184,5 +194,9 @@ class DrqnAgent(DqnAgent):
             self.grad_norm_clip,
             error_if_nonfinite=True,
         )
-        self.grad_norms.add(norm)
+        self.grad_norms.add(norm.item())
         self.optimizer.step()
+        self.num_train_steps += 1
+
+        if self.num_train_steps % self.target_update_frequency == 0:
+            self.target_update()

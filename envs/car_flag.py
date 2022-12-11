@@ -5,6 +5,7 @@ from numpy.random import Generator
 import gym
 from gym import spaces
 from typing import Optional
+
 # from pyglet.canvas.xlib import NoSuchDisplayException
 
 # Running on slurm

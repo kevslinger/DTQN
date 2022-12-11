@@ -1,27 +1,20 @@
-from distutils.log import warn
-from typing import Optional
-from dtqn.agents.dqn import DqnAgent
-from dtqn.agents.drqn import DrqnAgent
-from utils import env_processing, epsilon_anneal
 import numpy as np
 import torch.nn.functional as F
 import torch
-import gym
-from gym import spaces
-import time
-import random
+from dtqn.agents.drqn import DrqnAgent
+from utils.env_processing import Context
 
 
 class DtqnAgent(DrqnAgent):
-
     @torch.no_grad()
-    def get_action(self, obs) -> int:
+    def get_action(self, context: Context, epsilon=0.0) -> int:
+        if np.random.rand() < epsilon:
+            return np.random.randint(self.num_actions)
         # the policy network gets [1, timestep+1 x obs length] as input and
         # outputs [1, timestep+1 x 4 outputs]
-        obs_history = self.context.get_history_of(obs)
         q_values = self.policy_network(
             torch.as_tensor(
-                obs_history, dtype=torch.float32, device=self.device
+                np.array(context.obs), dtype=self.obs_tensor_type, device=self.device
             ).unsqueeze(0)
         )
         # We take the argmax of the last timestep's Q values
@@ -31,7 +24,7 @@ class DtqnAgent(DrqnAgent):
     def train(self) -> None:
         if not self.replay_buffer.can_sample(self.batch_size):
             return
-
+        self.eval_off()
         (
             obss,
             actions,
@@ -41,9 +34,9 @@ class DtqnAgent(DrqnAgent):
             episode_lengths,
         ) = self.replay_buffer.sample(self.batch_size)
         # Obss and Next obss: [batch-size x hist-len x obs-dim]
-        obss = torch.as_tensor(obss, dtype=torch.float32, device=self.device)
+        obss = torch.as_tensor(obss, dtype=self.obs_tensor_type, device=self.device)
         next_obss = torch.as_tensor(
-            next_obss, dtype=torch.float32, device=self.device
+            next_obss, dtype=self.obs_tensor_type, device=self.device
         )
         # Actions: [batch-size x hist-len x 1]
         actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
@@ -84,22 +77,24 @@ class DtqnAgent(DrqnAgent):
             # here goes BELLMAN
             if self.history:
                 targets = rewards.squeeze() + (1 - dones.squeeze()) * (
-                        next_obs_q_values * self.gamma
+                    next_obs_q_values * self.gamma
                 )
             else:
                 targets = rewards[:, -1, :].squeeze() + (
-                        1 - dones[:, -1, :].squeeze()
+                    1 - dones[:, -1, :].squeeze()
                 ) * (next_obs_q_values * self.gamma)
 
-        self.qvalue_max.add(q_values.max())
-        self.qvalue_mean.add(q_values.mean())
-        self.qvalue_min.add(q_values.min())
-        self.target_max.add(targets.max())
-        self.target_mean.add(targets.mean())
-        self.target_min.add(targets.min())
+        self.qvalue_max.add(q_values.max().item())
+        self.qvalue_mean.add(q_values.mean().item())
+        self.qvalue_min.add(q_values.min().item())
 
+        self.target_max.add(targets.max().item())
+        self.target_mean.add(targets.mean().item())
+        self.target_min.add(targets.min().item())
+
+        # Optimization step
         loss = F.mse_loss(q_values, targets)
-        self.td_errors.add(loss)
+        self.td_errors.add(loss.item())
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(
@@ -107,7 +102,9 @@ class DtqnAgent(DrqnAgent):
             self.grad_norm_clip,
             error_if_nonfinite=True,
         )
-        self.grad_norms.add(norm)
-
+        self.grad_norms.add(norm.item())
         self.optimizer.step()
+        self.num_train_steps += 1
 
+        if self.num_train_steps % self.target_update_frequency == 0:
+            self.target_update()

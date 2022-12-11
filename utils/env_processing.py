@@ -1,6 +1,5 @@
 from collections import deque
 
-import torch
 import gym
 from gym import spaces
 from gym.wrappers.time_limit import TimeLimit
@@ -35,7 +34,7 @@ class ObsType(Enum):
 
 def get_env_obs_type(obs_space: spaces.Space) -> int:
     if isinstance(
-            obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
     ):
         return ObsType.DISCRETE
     else:
@@ -94,7 +93,7 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
     if isinstance(env.observation_space, gym.spaces.Discrete):
         return env.observation_space.n
     elif isinstance(env.observation_space, gym.spaces.MultiDiscrete):
-        return env.observation_space.nvec + 1
+        return max(env.observation_space.nvec) + 1
     elif isinstance(env.observation_space, gym.spaces.Box):
         # If you would like to use DTQN with a continuous action space, make sure this value is
         #       below the minimum possible observation. Otherwise it will appear as a real observation
@@ -107,32 +106,54 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
 
 # noinspection PyAttributeOutsideInit
 class Context:
-    def __init__(self, length: int, obs_mask, num_actions, initial_hidden, env_obs_length):
+    def __init__(self, length: int, obs_mask, num_actions, env_obs_length):
         self.length = length
         self.env_obs_length = env_obs_length
         self.num_actions = num_actions
         self.obs_mask = obs_mask
         self.reward_mask = 0
         self.done_mask = True
-        self.initial_hidden = initial_hidden
+        self.timestep = 0
+        self.hidden = None
         self.reset()
 
     def reset(self):
-        self.obs = deque([[self.obs_mask]*self.env_obs_length]*self.length, maxlen=self.length)
-        self.next_obs = deque([[self.obs_mask]*self.env_obs_length]*self.length, maxlen=self.length)
-        self.action = deque([[np.random.randint(self.num_actions)]]*self.length, maxlen=self.length)
-        self.reward = deque([[self.reward_mask]]*self.length, maxlen=self.length)
-        self.done = deque([[self.done_mask]]*self.length, maxlen=self.length)
-        self.hidden = self.initial_hidden
+        self.obs = deque(
+            [[self.obs_mask] * self.env_obs_length] * self.length, maxlen=self.length
+        )
+        self.next_obs = deque(
+            [[self.obs_mask] * self.env_obs_length] * self.length, maxlen=self.length
+        )
+        self.action = deque(
+            [[np.random.randint(self.num_actions)]] * self.length, maxlen=self.length
+        )
+        self.reward = deque([[self.reward_mask]] * self.length, maxlen=self.length)
+        self.done = deque([[self.done_mask]] * self.length, maxlen=self.length)
+        self.hidden = None
+        self.timestep = 0
 
     def add(self, o, next_o, a, r, done):
+        # Evict last
         self.obs.append(o)
         self.next_obs.append(next_o)
         self.action.append([a])
         self.reward.append([r])
         self.done.append([done])
+        self.timestep += 1
 
-    def export(self):
+    def add_obs(self, o):
+        self.obs.append(o)
+
+    def complete(self, next_o, a, r, done):
+        self.next_obs.append(next_o)
+        self.action.append([a])
+        self.reward.append([r])
+        self.done.append([done])
+        self.timestep += 1
+
+    def export(
+        self,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         return (
             np.array(self.obs),
             np.array(self.next_obs),
@@ -140,6 +161,9 @@ class Context:
             np.array(self.reward),
             np.array(self.done),
         )
+
+    def update_hidden(self, hidden):
+        self.hidden = hidden
 
     @property
     def last_action(self):
@@ -150,3 +174,11 @@ class Context:
         res.append(obs)
         return np.array(res)
 
+    @staticmethod
+    def context_like(context):
+        return Context(
+            context.length,
+            context.obs_mask,
+            context.num_actions,
+            context.env_obs_length,
+        )

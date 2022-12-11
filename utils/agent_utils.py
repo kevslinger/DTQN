@@ -46,7 +46,7 @@ def get_agent(
     num_heads: int = 1,
     num_layers: int = 1,
     dropout: float = 0.0,
-    identity: bool = True,
+    identity: bool = False,
     gate: str = "res",
     pos: int = 1,
 ):
@@ -61,7 +61,8 @@ def get_agent(
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
 
-    if model_str == 'DQN': context_len = 1
+    if model_str == "DQN":
+        context_len = 1
 
     def make_model(network_cls):
         return lambda: network_cls(
@@ -102,6 +103,9 @@ def get_agent(
         buffer_size,
         device,
         env_obs_length,
+        env_processing.get_env_obs_mask(env),
+        env.action_space.n,
+        is_discrete_env,
         learning_rate=learning_rate,
         batch_size=batch_size,
         gamma=gamma,
@@ -109,6 +113,4 @@ def get_agent(
         embed_size=inner_embed,
         history=history,
         target_update_frequency=target_update_frequency,
-        obs_mask=env_processing.get_env_obs_mask(env),
-        num_actions=env.action_space.n,
     )
