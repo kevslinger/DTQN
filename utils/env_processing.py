@@ -106,8 +106,17 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
 
 # noinspection PyAttributeOutsideInit
 class Context:
-    def __init__(self, length: int, obs_mask, num_actions, env_obs_length):
-        self.length = length
+    """A Dataclass dedicated to storing the agent's history (up to the previous `max_length` transitions)
+
+    Args:
+        context_length: The maximum number of transitions to store
+        obs_mask: The mask to use for observations not yet seen
+        num_actions: The number of possible actions we can take in the environment
+        env_obs_length: The dimension of the observations (assume 1d arrays)
+    """
+
+    def __init__(self, context_length: int, obs_mask, num_actions, env_obs_length):
+        self.max_length = context_length
         self.env_obs_length = env_obs_length
         self.num_actions = num_actions
         self.obs_mask = obs_mask
@@ -118,66 +127,100 @@ class Context:
         self.reset()
 
     def reset(self):
-        self.obs = deque(
-            [[self.obs_mask] * self.env_obs_length] * self.length, maxlen=self.length
+        """Resets to a fresh context"""
+        self.obs = np.array(
+            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
         )
-        self.next_obs = deque(
-            [[self.obs_mask] * self.env_obs_length] * self.length, maxlen=self.length
+        self.next_obs = np.array(
+            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
         )
-        self.action = deque(
-            [[np.random.randint(self.num_actions)]] * self.length, maxlen=self.length
+        self.action = np.array(
+            [np.array([np.random.randint(self.num_actions)])] * self.max_length,
         )
-        self.reward = deque([[self.reward_mask]] * self.length, maxlen=self.length)
-        self.done = deque([[self.done_mask]] * self.length, maxlen=self.length)
+        self.reward = np.array(
+            [np.array([self.reward_mask])] * self.max_length,
+        )
+        self.done = np.array(
+            [np.array([self.done_mask])] * self.max_length,
+        )
         self.hidden = None
         self.timestep = 0
 
-    def add(self, o, next_o, a, r, done):
-        # Evict last
-        self.obs.append(o)
-        self.next_obs.append(next_o)
-        self.action.append([a])
-        self.reward.append([r])
-        self.done.append([done])
+    def add(
+        self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
+    ) -> None:
+        """Add an entire transition. If the context is full, evict the oldest transition"""
+        t = self.timestep if self.timestep < self.max_length else 0
+        self.obs[t] = o
+        self.next_obs[t] = next_o
+        self.action[t] = np.array([a])
+        self.reward[t] = np.array([r])
+        self.done[t] = np.array([done])
+        if self.timestep >= self.max_length:
+            self.obs = self.roll(self.obs)
+            self.next_obs = self.roll(self.next_obs)
+            self.action = self.roll(self.action)
+            self.reward = self.roll(self.reward)
+            self.done = self.roll(self.done)
         self.timestep += 1
 
-    def add_obs(self, o):
-        self.obs.append(o)
+    def add_obs(self, o: np.ndarray) -> None:
+        """Add an observation to the context. If the context is full, evict the oldest observation."""
+        t = self.timestep if self.timestep < self.max_length else 0
+        self.obs[t] = o
+        if self.timestep >= self.max_length:
+            self.obs = self.roll(self.obs)
 
-    def complete(self, next_o, a, r, done):
-        self.next_obs.append(next_o)
-        self.action.append([a])
-        self.reward.append([r])
-        self.done.append([done])
+    def complete_transition(self, next_o: np.ndarray, a: int, r: float, done: bool):
+        """Complete the transition with the next observation, action, reward, and done flag. If the context is full, evict the oldest information"""
+        t = self.timestep if self.timestep < self.max_length else 0
+        self.next_obs[t] = next_o
+        self.action[t] = np.array([a])
+        self.reward[t] = np.array([r])
+        self.done[t] = np.array([done])
+        if self.timestep >= self.max_length:
+            self.next_obs = self.roll(self.next_obs)
+            self.action = self.roll(self.action)
+            self.reward = self.roll(self.reward)
+            self.done = self.roll(self.done)
         self.timestep += 1
 
     def export(
         self,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Export the context"""
         return (
-            np.array(self.obs),
-            np.array(self.next_obs),
-            np.array(self.action),
-            np.array(self.reward),
-            np.array(self.done),
+            self.obs,
+            self.next_obs,
+            self.action,
+            self.reward,
+            self.done,
         )
 
     def update_hidden(self, hidden):
+        """Replace the hidden state (for use with RNNs)"""
         self.hidden = hidden
+
+    def roll(self, arr: np.ndarray):
+        return np.roll(arr, -1, axis=0)
 
     @property
     def last_action(self):
+        """Get the last action taken"""
         return self.action[-1][0]
 
-    def get_history_of(self, obs):
-        res = self.obs.copy()
-        res.append(obs)
-        return np.array(res)
+    @property
+    def obs_history(self):
+        """Get the agent's observation history.
+
+        NOTE: We typically use this once we've seen an observation but before completing a context. That's why we're using `self.timestep+1`"""
+        return self.obs[: self.timestep + 1]
 
     @staticmethod
     def context_like(context):
+        """Creates a new context to mimic the supplied context"""
         return Context(
-            context.length,
+            context.max_length,
             context.obs_mask,
             context.num_actions,
             context.env_obs_length,

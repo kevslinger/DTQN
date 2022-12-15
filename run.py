@@ -1,19 +1,18 @@
 import os
 import argparse
-from random import random
 from time import time
 from typing import Optional
 
 import torch
 import wandb
 from gym import Env
-import numpy as np
 
-from utils import agent_utils, env_processing, logging_utils, epsilon_anneal
-from utils.agent_utils import MODEL_MAP
+from utils import env_processing, epsilon_anneal
+from utils.agent_utils import MODEL_MAP, get_agent
 from utils.random import set_global_seed
 from utils.env_processing import Context
-from utils.logging_utils import RunningAverage
+from utils.logging_utils import RunningAverage, get_logger, timestamp
+
 
 try:
     import gym_pomdps
@@ -183,17 +182,15 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
         context.reset()
         obs = eval_env.reset()
         done = False
-        timestep = 0
         ep_reward = 0
         if render:
             eval_env.render()
             time.sleep(0.5)
         while not done:
-            timestep += 1
             context.add_obs(obs)
             action = agent.get_action(context, epsilon=0.0)
             obs, reward, done, info = eval_env.step(action)
-            context.complete(obs, action, reward, done)
+            context.complete_transition(obs, action, reward, done)
             ep_reward += reward
             if render:
                 eval_env.render()
@@ -201,11 +198,10 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 time.sleep(0.5)
         total_reward += ep_reward
-        total_steps += timestep
+        total_steps += context.timestep
         if info.get("is_success", False) or ep_reward > 0:
             num_successes += 1
 
-    del context
     # Set networks back to train mode
     agent.eval_off()
     return (
@@ -237,7 +233,7 @@ def train(
 
     for timestep in range(agent.num_train_steps, total_steps):
         obs = step(agent, env, obs, eps)
-        
+
         agent.train()
         eps.anneal()
 
@@ -270,7 +266,7 @@ def train(
 
             if verbose:
                 print(
-                    f"[ {logging_utils.timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time() - start_time) / 3600):.2f}"
+                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time() - start_time) / 3600):.2f}"
                 )
 
         if save_policy and timestep % 50_000 == 0:
@@ -282,7 +278,12 @@ def train(
             )
 
             agent.save_checkpoint(
-                policy_path, wandb.run.id if logger == wandb else None, mean_reward, mean_success_rate, mean_episode_length, eps
+                policy_path,
+                wandb.run.id if logger == wandb else None,
+                mean_reward,
+                mean_success_rate,
+                mean_episode_length,
+                eps,
             )
             return
 
@@ -306,31 +307,6 @@ def step(agent, env, obs, eps):
         next_obs = env.reset()
 
     return next_obs
-
-
-def get_logger(policy_path: str, args, wandb_kwargs):
-    if args.disable_wandb:
-        logger = logging_utils.CSVLogger(policy_path)
-    else:
-        logging_utils.wandb_init(
-            vars(args),
-            [
-                "model",
-                "obsembed",
-                "inembed",
-                "context",
-                "heads",
-                "layers",
-                "batch",
-                "gate",
-                "identity",
-                "history",
-                "pos",
-            ],
-            **wandb_kwargs,
-        )
-        logger = wandb
-    return logger
 
 
 def prepopulate(agent, prepop_steps, env: Env):
@@ -362,7 +338,7 @@ def run_experiment(args):
 
     eps = epsilon_anneal.LinearAnneal(1.0, 0.1, args.num_steps // 10)
 
-    agent = agent_utils.get_agent(
+    agent = get_agent(
         args.model,
         env,
         args.obsembed,
@@ -385,7 +361,7 @@ def run_experiment(args):
     )
 
     print(
-        f"[ {logging_utils.timestamp()} ] Creating {args.model} with {sum(p.numel() for p in agent.policy_network.parameters())} parameters"
+        f"[ {timestamp()} ] Creating {args.model} with {sum(p.numel() for p in agent.policy_network.parameters())} parameters"
     )
 
     # Create logging dir
@@ -417,7 +393,13 @@ def run_experiment(args):
                 os.remove(policy_path + "_checkpoint.pt")
             exit(0)
         else:
-            wandb_id, mean_reward, mean_success_rate, mean_episode_length, eps_val = agent.load_checkpoint(policy_path)
+            (
+                wandb_id,
+                mean_reward,
+                mean_success_rate,
+                mean_episode_length,
+                eps_val,
+            ) = agent.load_checkpoint(policy_path)
             eps.val = eps_val
             wandb_kwargs = {"resume": "must", "id": wandb_id}
     # Begin training from scratch
@@ -426,14 +408,15 @@ def run_experiment(args):
         # Prepopulate the replay buffer
         prepopulate(agent, 50_000, env)
         mean_reward = RunningAverage(10)
-        mean_success_rate = RunningAverage(10)        
+        mean_success_rate = RunningAverage(10)
         mean_episode_length = RunningAverage(10)
-        
 
     # Logging setup
     logger = get_logger(policy_path, args, wandb_kwargs)
 
-    time_remaining = args.time_limit * 3600 - (time() - start_time) if args.time_limit else None
+    time_remaining = (
+        args.time_limit * 3600 - (time() - start_time) if args.time_limit else None
+    )
     train(
         agent,
         env,

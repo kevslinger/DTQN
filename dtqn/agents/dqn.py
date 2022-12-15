@@ -179,7 +179,7 @@ class DqnAgent:
     def complete_context_transition(
         self, next_obs: np.ndarray, action: int, reward: float, buffer_done: bool
     ) -> None:
-        self.context.complete(next_obs, action, reward, buffer_done)
+        self.context.complete_transition(next_obs, action, reward, buffer_done)
 
     def save_mini_checkpoint(self, checkpoint_dir: str, wandb_id: str) -> None:
         torch.save(
@@ -190,7 +190,15 @@ class DqnAgent:
     def load_mini_checkpoint(self, checkpoint_dir: str) -> dict:
         return torch.load(checkpoint_dir + "_mini_checkpoint.pt")
 
-    def save_checkpoint(self, checkpoint_dir: str, wandb_id: str, episode_rewards: RunningAverage, episode_successes: RunningAverage, episode_lengths: RunningAverage, eps: LinearAnneal) -> None:
+    def save_checkpoint(
+        self,
+        checkpoint_dir: str,
+        wandb_id: str,
+        episode_rewards: RunningAverage,
+        episode_successes: RunningAverage,
+        episode_lengths: RunningAverage,
+        eps: LinearAnneal,
+    ) -> None:
         self.save_mini_checkpoint(checkpoint_dir=checkpoint_dir, wandb_id=wandb_id)
         torch.save(
             # np.savez_compressed(
@@ -283,4 +291,10 @@ class DqnAgent:
         # Exploration value
         epsilon = checkpoint["epsilon"]
 
-        return checkpoint["wandb_id"], episode_rewards, episode_successes, episode_lengths, epsilon
+        return (
+            checkpoint["wandb_id"],
+            episode_rewards,
+            episode_successes,
+            episode_lengths,
+            epsilon,
+        )

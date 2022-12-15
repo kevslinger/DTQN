@@ -1,6 +1,5 @@
 from __future__ import annotations
 import torch.nn as nn
-from typing import Optional
 
 
 class EmbeddingRepresentation(nn.Module):

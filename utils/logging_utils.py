@@ -110,3 +110,28 @@ class CSVLogger:
                     results["losses/Min_Target_Value"],
                 ]
             )
+
+
+def get_logger(policy_path: str, args, wandb_kwargs):
+    if args.disable_wandb:
+        logger = CSVLogger(policy_path)
+    else:
+        wandb_init(
+            vars(args),
+            [
+                "model",
+                "obsembed",
+                "inembed",
+                "context",
+                "heads",
+                "layers",
+                "batch",
+                "gate",
+                "identity",
+                "history",
+                "pos",
+            ],
+            **wandb_kwargs,
+        )
+        logger = wandb
+    return logger
