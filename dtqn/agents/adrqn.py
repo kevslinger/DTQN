@@ -12,13 +12,11 @@ class AdrqnAgent(DrqnAgent):
         env_obs_length: int,
         context_len: int = 50,
         history: bool = True,
-        obs_mask: float = 0,
         num_actions: int = 3,
         **kwargs
     ):
         super().__init__(network_factory, buf_size, device, env_obs_length, **kwargs)
         self.context_len = context_len
-        self.obs_mask = obs_mask
         self.history = history
 
         self.zeros_hidden = torch.zeros(
@@ -33,7 +31,7 @@ class AdrqnAgent(DrqnAgent):
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
         self.context = Context(
-            context_len, obs_mask, num_actions, hidden_states, env_obs_length
+            context_len, self.obs_mask, num_actions, hidden_states, env_obs_length
         )
 
     @torch.no_grad()

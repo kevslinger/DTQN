@@ -187,7 +187,8 @@ class DqnAgent:
             checkpoint_dir + "_mini_checkpoint.pt",
         )
 
-    def load_mini_checkpoint(self, checkpoint_dir: str) -> dict:
+    @staticmethod
+    def load_mini_checkpoint(checkpoint_dir: str) -> dict:
         return torch.load(checkpoint_dir + "_mini_checkpoint.pt")
 
     def save_checkpoint(

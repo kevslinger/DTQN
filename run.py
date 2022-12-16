@@ -2,7 +2,7 @@ import os
 import argparse
 from time import time
 from typing import Optional
-
+import time
 import torch
 import wandb
 from gym import Env
@@ -183,6 +183,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
         obs = eval_env.reset()
         done = False
         ep_reward = 0
+        info = {}
         if render:
             eval_env.render()
             time.sleep(0.5)
@@ -380,6 +381,10 @@ def run_experiment(args):
         )
         evaluate(agent, env, 1_000_000, render=True)
 
+    wandb_kwargs = {"resume": None}
+    mean_reward = RunningAverage(10)
+    mean_success_rate = RunningAverage(10)
+    mean_episode_length = RunningAverage(10)
     # If there is already a saved checkpoint, load it and resume training if more steps are needed
     # Or exit early if we have already finished training.
     if os.path.exists(policy_path + "_mini_checkpoint.pt"):
@@ -404,12 +409,8 @@ def run_experiment(args):
             wandb_kwargs = {"resume": "must", "id": wandb_id}
     # Begin training from scratch
     else:
-        wandb_kwargs = {"resume": None}
         # Prepopulate the replay buffer
         prepopulate(agent, 50_000, env)
-        mean_reward = RunningAverage(10)
-        mean_success_rate = RunningAverage(10)
-        mean_episode_length = RunningAverage(10)
 
     # Logging setup
     logger = get_logger(policy_path, args, wandb_kwargs)

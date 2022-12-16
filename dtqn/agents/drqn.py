@@ -57,7 +57,7 @@ class DrqnAgent(DqnAgent):
         )
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
-
+        self.obs_mask = obs_mask
         self.context = Context(context_len, obs_mask, num_actions, env_obs_length)
         self.context.update_hidden(hidden_states)
 
