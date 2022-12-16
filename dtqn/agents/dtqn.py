@@ -7,14 +7,14 @@ from utils.env_processing import Context
 
 class DtqnAgent(DrqnAgent):
     @torch.no_grad()
-    def get_action(self, context: Context, epsilon: float = 0.0) -> int:
+    def get_action(self, obs, epsilon: float = 0.0) -> int:
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         # the policy network gets [1, timestep+1 x obs length] as input and
         # outputs [1, timestep+1 x 4 outputs]
         q_values = self.policy_network(
             torch.as_tensor(
-                context.obs_history,
+                self.context.hist_with_obs(obs),
                 dtype=self.obs_tensor_type,
                 device=self.device,
             ).unsqueeze(0)
