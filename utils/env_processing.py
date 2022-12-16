@@ -34,7 +34,7 @@ class ObsType(Enum):
 
 def get_env_obs_type(obs_space: spaces.Space) -> int:
     if isinstance(
-        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+            obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
     ):
         return ObsType.DISCRETE
     else:
@@ -115,7 +115,7 @@ class Context:
         env_obs_length: The dimension of the observations (assume 1d arrays)
     """
 
-    def __init__(self, context_length: int, obs_mask, num_actions, env_obs_length):
+    def __init__(self, context_length: int, obs_mask, num_actions, env_obs_length, init_hidden=None):
         self.max_length = context_length
         self.env_obs_length = env_obs_length
         self.num_actions = num_actions
@@ -123,7 +123,8 @@ class Context:
         self.reward_mask = 0
         self.done_mask = True
         self.timestep = 0
-        self.hidden = None
+        self.init_hidden = init_hidden
+        self.hidden = init_hidden
         self.reset()
 
     def reset(self):
@@ -146,10 +147,9 @@ class Context:
         self.hidden = None
         self.timestep = 0
 
-    def add(
-        self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
-    ) -> None:
-        """Add an entire transition. If the context is full, evict the oldest transition"""
+    def add_transition(self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool):
+        """Complete the transition with the next observation, action, reward, and done flag. If the context is full,
+        evict the oldest information """
         t = self.timestep if self.timestep < self.max_length else 0
         self.obs[t] = o
         self.next_obs[t] = next_o
@@ -158,27 +158,6 @@ class Context:
         self.done[t] = np.array([done])
         if self.timestep >= self.max_length:
             self.obs = self.roll(self.obs)
-            self.next_obs = self.roll(self.next_obs)
-            self.action = self.roll(self.action)
-            self.reward = self.roll(self.reward)
-            self.done = self.roll(self.done)
-        self.timestep += 1
-
-    def add_obs(self, o: np.ndarray) -> None:
-        """Add an observation to the context. If the context is full, evict the oldest observation."""
-        t = self.timestep if self.timestep < self.max_length else 0
-        self.obs[t] = o
-        if self.timestep >= self.max_length:
-            self.obs = self.roll(self.obs)
-
-    def complete_transition(self, next_o: np.ndarray, a: int, r: float, done: bool):
-        """Complete the transition with the next observation, action, reward, and done flag. If the context is full, evict the oldest information"""
-        t = self.timestep if self.timestep < self.max_length else 0
-        self.next_obs[t] = next_o
-        self.action[t] = np.array([a])
-        self.reward[t] = np.array([r])
-        self.done[t] = np.array([done])
-        if self.timestep >= self.max_length:
             self.next_obs = self.roll(self.next_obs)
             self.action = self.roll(self.action)
             self.reward = self.roll(self.reward)
@@ -186,7 +165,7 @@ class Context:
         self.timestep += 1
 
     def export(
-        self,
+            self,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Export the context"""
         return (
@@ -197,11 +176,8 @@ class Context:
             self.done,
         )
 
-    def update_hidden(self, hidden):
-        """Replace the hidden state (for use with RNNs)"""
-        self.hidden = hidden
-
-    def roll(self, arr: np.ndarray):
+    @staticmethod
+    def roll(arr: np.ndarray):
         return np.roll(arr, -1, axis=0)
 
     @property
@@ -213,7 +189,8 @@ class Context:
     def obs_history(self):
         """Get the agent's observation history.
 
-        NOTE: We typically use this once we've seen an observation but before completing a context. That's why we're using `self.timestep+1`"""
+        NOTE: We typically use this once we've seen an observation but before completing a context. That's why we're
+        using `self.timestep+1` """
         return self.obs[: self.timestep + 1]
 
     @staticmethod
@@ -224,4 +201,5 @@ class Context:
             context.obs_mask,
             context.num_actions,
             context.env_obs_length,
+            init_hidden=context.init_hidden,
         )
