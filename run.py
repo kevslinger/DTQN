@@ -1,6 +1,5 @@
 import os
 import argparse
-from time import time
 from typing import Optional
 import time
 import torch
@@ -10,7 +9,6 @@ from gym import Env
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
 from utils.random import set_global_seed
-from utils.env_processing import Context
 from utils.logging_utils import RunningAverage, get_logger, timestamp
 
 
@@ -227,7 +225,7 @@ def train(
     time_remaining: Optional[int],
     verbose: bool = False,
 ):
-    start_time = time()
+    start_time = time.time()
     obs = env.reset()
 
     for timestep in range(agent.num_train_steps, total_steps):
@@ -258,20 +256,20 @@ def train(
                     "results/Mean_Success_Rate": mean_success_rate.mean(),
                     "results/Episode_Length": length,
                     "results/Mean_Episode_Length": mean_episode_length.mean(),
-                    "results/Hours": (time() - start_time) / 3600,
+                    "results/Hours": (time.time() - start_time) / 3600,
                 },
                 step=timestep,
             )
 
             if verbose:
                 print(
-                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time() - start_time) / 3600):.2f}"
+                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time.time() - start_time) / 3600):.2f}"
                 )
 
         if save_policy and timestep % 50_000 == 0:
             torch.save(agent.policy_network.state_dict(), policy_path)
 
-        if time_remaining and time() - start_time >= time_remaining:
+        if time_remaining and time.time() - start_time >= time_remaining:
             print(
                 f"Reached time limit. Saving checkpoint with {agent.num_train_steps} steps completed."
             )
@@ -321,7 +319,7 @@ def prepopulate(agent, prepop_steps, env: Env):
 
 
 def run_experiment(args):
-    start_time = time()
+    start_time = time.time()
     # Create envs, set seed, create RL agent
     env = env_processing.make_env(args.env)
     eval_env = env_processing.make_env(args.env)
@@ -407,7 +405,7 @@ def run_experiment(args):
     logger = get_logger(policy_path, args, wandb_kwargs)
 
     time_remaining = (
-        args.time_limit * 3600 - (time() - start_time) if args.time_limit else None
+        args.time_limit * 3600 - (time.time() - start_time) if args.time_limit else None
     )
     train(
         agent,

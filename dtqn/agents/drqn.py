@@ -70,11 +70,11 @@ class DrqnAgent(DqnAgent):
         super().eval_off()
         self.context = self.train_context
 
-    def observe(self, cur_obs, obs, action, reward, done, timestep):
+    def observe(self, cur_obs, obs, action, reward, done):
         self.context.add_transition(cur_obs, obs, action, reward, done)
         if self.train_mode:
             o, o_n, a, r, d = self.context.export()
-            self.replay_buffer.store(o, o_n, a, r, d, min(self.context_len, timestep + 1))
+            self.replay_buffer.store(o, o_n, a, r, d, min(self.context_len, self.context.timestep + 1)) # TODO: Is this +1 necessary?
 
     @torch.no_grad()
     def get_action(self, obs, epsilon=0.0):

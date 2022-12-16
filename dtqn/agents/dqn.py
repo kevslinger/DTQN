@@ -102,12 +102,12 @@ class DqnAgent:
         )
         return torch.argmax(q_values).item()
 
-    def observe(self, cur_obs, obs, action, reward, done, timestep):
+    def observe(self, cur_obs, obs, action, reward, done):
         if self.train_mode:
             self.replay_buffer.store(cur_obs, obs, action, reward, done)
 
     def context_reset(self):
-        pass
+        self.context.reset()
 
     def train(self) -> None:
         """Perform one gradient step of the network"""
@@ -247,7 +247,7 @@ class DqnAgent:
             self.replay_buffer.episode_lengths, checkpoint_dir + "buffer_eplens.sav"
         )
 
-    def load_checkpoint(self, checkpoint_dir: str) -> tuple[Any, Any, Any, Any, Any]:
+    def load_checkpoint(self, checkpoint_dir: str) -> Tuple[Any, Any, Any, Any, Any]:
         checkpoint = torch.load(checkpoint_dir + "_checkpoint.pt")
         # checkpoint = np.load(checkpoint_dir + "_checkpoint.npz", allow_pickle=True)
 
