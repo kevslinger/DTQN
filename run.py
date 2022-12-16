@@ -194,6 +194,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 time.sleep(0.5)
+            obs = obs_next
         total_reward += ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:

@@ -57,18 +57,8 @@ class DrqnAgent(DqnAgent):
         )
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
-        self.obs_mask = obs_mask
         self.train_context = Context(context_len, obs_mask, num_actions, env_obs_length, init_hidden=hidden_states)
         self.eval_context = Context(context_len, obs_mask, num_actions, env_obs_length, init_hidden=hidden_states)
-        self.context = self.train_context
-
-    def eval_on(self):
-        super().eval_on()
-        self.context = self.eval_context
-
-    def eval_off(self):
-        super().eval_off()
-        self.context = self.train_context
 
     def observe(self, cur_obs, obs, action, reward, done):
         self.context.add_transition(cur_obs, obs, action, reward, done)

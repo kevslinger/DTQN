@@ -14,7 +14,7 @@ class DtqnAgent(DrqnAgent):
         # outputs [1, timestep+1 x 4 outputs]
         q_values = self.policy_network(
             torch.as_tensor(
-                self.context.hist_with_obs(obs),
+                self.context.hist_with_obs(obs)[:self.context.timestep+1],
                 dtype=self.obs_tensor_type,
                 device=self.device,
             ).unsqueeze(0)

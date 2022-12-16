@@ -79,8 +79,15 @@ class DqnAgent:
         self.target_min = RunningAverage(100)
 
         self.num_actions = num_actions
-        self.context = Context(context_len, obs_mask, self.num_actions, env_obs_length)
+        
         self.train_mode = True
+        self.obs_mask = obs_mask
+        self.train_context = Context(context_len, obs_mask, num_actions, env_obs_length)
+        self.eval_context = Context(context_len, obs_mask, num_actions, env_obs_length)
+
+    @property
+    def context(self):
+        return self.train_context if self.train_mode else self.eval_context
 
     def eval_on(self):
         self.train_mode = False

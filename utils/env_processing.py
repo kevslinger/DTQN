@@ -120,7 +120,7 @@ class Context:
         self.env_obs_length = env_obs_length
         self.num_actions = num_actions
         self.obs_mask = obs_mask
-        self.reward_mask = 0
+        self.reward_mask = 0.
         self.done_mask = True
         self.timestep = 0
         self.init_hidden = init_hidden
