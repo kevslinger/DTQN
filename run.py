@@ -10,7 +10,6 @@ from gym import Env
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
 from utils.random import set_global_seed
-from utils.env_processing import Context
 from utils.logging_utils import RunningAverage, get_logger, timestamp
 
 
@@ -171,15 +170,13 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
     """Evaluate the network for n_episodes"""
     # Set networks to eval mode (turns off dropout, etc.)
     agent.eval_on()
-    # Copy format of agent context
-    context = Context.context_like(agent.context)
 
     total_reward = 0
     num_successes = 0
     total_steps = 0
 
     for _ in range(eval_episodes):
-        context.reset()
+        agent.context.reset()
         obs = eval_env.reset()
         done = False
         ep_reward = 0
@@ -187,18 +184,19 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
             eval_env.render()
             time.sleep(0.5)
         while not done:
-            context.add_obs(obs)
-            action = agent.get_action(context, epsilon=0.0)
-            obs, reward, done, info = eval_env.step(action)
-            context.complete_transition(obs, action, reward, done)
+            # context.add_obs(obs)
+            action = agent.get_action(obs, epsilon=0.0)
+            obs_next, reward, done, info = eval_env.step(action)
+            agent.observe(obs, obs_next, action, reward, done)
             ep_reward += reward
             if render:
                 eval_env.render()
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 time.sleep(0.5)
+            obs = obs_next
         total_reward += ep_reward
-        total_steps += context.timestep
+        total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
             num_successes += 1
 
@@ -229,6 +227,7 @@ def train(
     verbose: bool = False,
 ):
     start_time = time()
+    agent.context_reset()
     obs = env.reset()
 
     for timestep in range(agent.num_train_steps, total_steps):
@@ -289,8 +288,7 @@ def train(
 
 
 def step(agent, env, obs, eps):
-    agent.add_obs_to_context(obs)
-    action = agent.get_action(agent.context, epsilon=eps.val)
+    action = agent.get_action(obs, epsilon=eps.val)
     next_obs, reward, done, info = env.step(action)
 
     # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
@@ -299,8 +297,7 @@ def step(agent, env, obs, eps):
     else:
         buffer_done = done
 
-    agent.complete_context_transition(next_obs, action, reward, buffer_done)
-    agent.store_context(agent.context)
+    agent.observe(obs, next_obs, action, reward, buffer_done)
 
     if done:
         agent.context_reset()
@@ -310,22 +307,17 @@ def step(agent, env, obs, eps):
 
 
 def prepopulate(agent, prepop_steps, env: Env):
-    context = Context.context_like(agent.context)
-
     timestep = 0
     while timestep < prepop_steps:
-        context.reset()
-        last_obs = env.reset()
+        agent.context.reset()
+        obs = env.reset()
         done = False
         while not done:
             action = env.action_space.sample()
-            obs, reward, done, _ = env.step(action)
-            context.add(last_obs, obs, action, reward, done)
-            agent.store_context(context)
+            next_obs, reward, done, _ = env.step(action)
+            agent.observe(obs, next_obs, action, reward, done)
             timestep += 1
-            last_obs = obs
-    context.reset()
-    env.reset()
+            obs = next_obs
 
 
 def run_experiment(args):

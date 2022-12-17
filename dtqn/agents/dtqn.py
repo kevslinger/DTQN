@@ -7,14 +7,14 @@ from utils.env_processing import Context
 
 class DtqnAgent(DrqnAgent):
     @torch.no_grad()
-    def get_action(self, context: Context, epsilon: float = 0.0) -> int:
+    def get_action(self, obs: np.ndarray, epsilon: float = 0.0) -> int:
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         # the policy network gets [1, timestep+1 x obs length] as input and
         # outputs [1, timestep+1 x 4 outputs]
         q_values = self.policy_network(
             torch.as_tensor(
-                context.obs_history,
+                self.context.hist_with_obs(obs)[: self.context.timestep + 1],
                 dtype=self.obs_tensor_type,
                 device=self.device,
             ).unsqueeze(0)
@@ -22,6 +22,23 @@ class DtqnAgent(DrqnAgent):
         # We take the argmax of the last timestep's Q values
         # In other words, select the highest q value action
         return torch.argmax(q_values[:, -1, :]).item()
+
+    # @torch.no_grad()
+    # def get_action(self, context: Context, epsilon: float = 0.0) -> int:
+    #     if np.random.rand() < epsilon:
+    #         return np.random.randint(self.num_actions)
+    #     # the policy network gets [1, timestep+1 x obs length] as input and
+    #     # outputs [1, timestep+1 x 4 outputs]
+    #     q_values = self.policy_network(
+    #         torch.as_tensor(
+    #             context.obs_history,
+    #             dtype=self.obs_tensor_type,
+    #             device=self.device,
+    #         ).unsqueeze(0)
+    #     )
+    #     # We take the argmax of the last timestep's Q values
+    #     # In other words, select the highest q value action
+    #     return torch.argmax(q_values[:, -1, :]).item()
 
     def train(self) -> None:
         if not self.replay_buffer.can_sample(self.batch_size):

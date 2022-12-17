@@ -113,17 +113,25 @@ class Context:
         obs_mask: The mask to use for observations not yet seen
         num_actions: The number of possible actions we can take in the environment
         env_obs_length: The dimension of the observations (assume 1d arrays)
+        init_hidden: The initial value of the hidden states (used for RNNs)
     """
 
-    def __init__(self, context_length: int, obs_mask, num_actions, env_obs_length):
+    def __init__(
+        self,
+        context_length: int,
+        obs_mask: int,
+        num_actions: int,
+        env_obs_length: int,
+        init_hidden=None,
+    ):
         self.max_length = context_length
         self.env_obs_length = env_obs_length
         self.num_actions = num_actions
         self.obs_mask = obs_mask
-        self.reward_mask = 0
+        self.reward_mask = 0.0
         self.done_mask = True
         self.timestep = 0
-        self.hidden = None
+        self.init_hidden = init_hidden
         self.reset()
 
     def reset(self):
@@ -143,47 +151,65 @@ class Context:
         self.done = np.array(
             [np.array([self.done_mask])] * self.max_length,
         )
-        self.hidden = None
+        self.hidden = self.init_hidden
         self.timestep = 0
 
-    def add(
+    # def add(
+    #     self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
+    # ) -> None:
+    #     """Add an entire transition. If the context is full, evict the oldest transition"""
+    #     t = self.timestep if self.timestep < self.max_length else 0
+    #     self.obs[t] = o
+    #     self.next_obs[t] = next_o
+    #     self.action[t] = np.array([a])
+    #     self.reward[t] = np.array([r])
+    #     self.done[t] = np.array([done])
+    #     if self.timestep >= self.max_length:
+    #         self.obs = self.roll(self.obs)
+    #         self.next_obs = self.roll(self.next_obs)
+    #         self.action = self.roll(self.action)
+    #         self.reward = self.roll(self.reward)
+    #         self.done = self.roll(self.done)
+    #     self.timestep += 1
+
+    def add_transition(
         self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
     ) -> None:
         """Add an entire transition. If the context is full, evict the oldest transition"""
-        t = self.timestep if self.timestep < self.max_length else 0
+        self.obs = self.roll(self.obs)
+        self.next_obs = self.roll(self.next_obs)
+        self.action = self.roll(self.action)
+        self.reward = self.roll(self.reward)
+        self.done = self.roll(self.done)
+
+        t = min(self.timestep, self.max_length - 1)
         self.obs[t] = o
         self.next_obs[t] = next_o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
-        if self.timestep >= self.max_length:
-            self.obs = self.roll(self.obs)
-            self.next_obs = self.roll(self.next_obs)
-            self.action = self.roll(self.action)
-            self.reward = self.roll(self.reward)
-            self.done = self.roll(self.done)
         self.timestep += 1
 
-    def add_obs(self, o: np.ndarray) -> None:
-        """Add an observation to the context. If the context is full, evict the oldest observation."""
-        t = self.timestep if self.timestep < self.max_length else 0
-        self.obs[t] = o
-        if self.timestep >= self.max_length:
-            self.obs = self.roll(self.obs)
+    # def add_obs(self, o: np.ndarray) -> None:
+    #     """Add an observation to the context. If the context is full, evict the oldest observation."""
+    #     t = self.timestep if self.timestep < self.max_length else 0
+    #     self.obs[t] = o
+    #     if self.timestep >= self.max_length:
+    #         self.obs = self.roll(self.obs)
 
-    def complete_transition(self, next_o: np.ndarray, a: int, r: float, done: bool):
-        """Complete the transition with the next observation, action, reward, and done flag. If the context is full, evict the oldest information"""
-        t = self.timestep if self.timestep < self.max_length else 0
-        self.next_obs[t] = next_o
-        self.action[t] = np.array([a])
-        self.reward[t] = np.array([r])
-        self.done[t] = np.array([done])
-        if self.timestep >= self.max_length:
-            self.next_obs = self.roll(self.next_obs)
-            self.action = self.roll(self.action)
-            self.reward = self.roll(self.reward)
-            self.done = self.roll(self.done)
-        self.timestep += 1
+    # def complete_transition(self, next_o: np.ndarray, a: int, r: float, done: bool):
+    #     """Complete the transition with the next observation, action, reward, and done flag. If the context is full, evict the oldest information"""
+    #     t = self.timestep if self.timestep < self.max_length else 0
+    #     self.next_obs[t] = next_o
+    #     self.action[t] = np.array([a])
+    #     self.reward[t] = np.array([r])
+    #     self.done[t] = np.array([done])
+    #     if self.timestep >= self.max_length:
+    #         self.next_obs = self.roll(self.next_obs)
+    #         self.action = self.roll(self.action)
+    #         self.reward = self.roll(self.reward)
+    #         self.done = self.roll(self.done)
+    #     self.timestep += 1
 
     def export(
         self,
@@ -197,12 +223,19 @@ class Context:
             self.done,
         )
 
+    def hist_with_obs(self, obs: np.ndarray) -> np.ndarray:
+        """Return an observation appended to the observation history, but do not commit it"""
+        hist = self.roll(self.obs).copy()
+        hist[min(self.timestep, self.max_length - 1)] = obs
+        return hist
+
+    def roll(self, arr: np.ndarray) -> np.ndarray:
+        """Utility function to help with insertions at the end of the array. If the context is full, we replace the first element with the new element, then 'roll' the new element to the end of the array"""
+        return np.roll(arr, -1, axis=0) if self.timestep >= self.max_length else arr
+
     def update_hidden(self, hidden):
         """Replace the hidden state (for use with RNNs)"""
         self.hidden = hidden
-
-    def roll(self, arr: np.ndarray):
-        return np.roll(arr, -1, axis=0)
 
     @property
     def last_action(self):
@@ -224,4 +257,5 @@ class Context:
             context.obs_mask,
             context.num_actions,
             context.env_obs_length,
+            init_hidden=context.init_hidden
         )

@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable, Union, Tuple
 import random
 
 import torch
@@ -51,12 +51,9 @@ class DqnAgent:
             self.obs_tensor_type = torch.float32
 
         # PyTorch config
-        self.eval_on = self.policy_network.eval
-        self.eval_off = self.policy_network.train
         self.device = device
 
-        optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
-        self.optimizer = optimizer
+        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
 
         self.replay_buffer = ReplayBuffer(
             buffer_size,
@@ -82,22 +79,43 @@ class DqnAgent:
         self.target_min = RunningAverage(100)
 
         self.num_actions = num_actions
-        self.context = Context(context_len, obs_mask, self.num_actions, env_obs_length)
+        self.train_mode = True
+        self.obs_mask = obs_mask
+        self.train_context = Context(
+            context_len, obs_mask, self.num_actions, env_obs_length
+        )
+        self.eval_context = Context(
+            context_len, obs_mask, self.num_actions, env_obs_length
+        )
+
+    @property
+    def context(self):
+        return self.train_context if self.train_mode else self.eval_context
+
+    def eval_on(self):
+        self.train_mode = False
+        self.policy_network.train()
+
+    def eval_off(self):
+        self.train_mode = True
+        self.policy_network.eval()
 
     @torch.no_grad()
-    def get_action(self, context: Context, epsilon=0.0) -> int:
+    def get_action(self, obs: np.ndarray, epsilon=0.0) -> int:
         """Use policy_network to get an e-greedy action given the current obs."""
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         q_values = self.policy_network(
-            torch.as_tensor(
-                context.obs[-1], dtype=self.obs_tensor_type, device=self.device
-            )
+            torch.as_tensor(obs, dtype=self.obs_tensor_type, device=self.device)
         )
         return torch.argmax(q_values).item()
 
-    def store_context(self, context: Context):
-        self.replay_buffer.store(*context.export())
+    def observe(self, obs, next_obs, action, reward, done) -> None:
+        if self.train_mode:
+            self.replay_buffer.store(obs, next_obs, action, reward, done)
+
+    def context_reset(self) -> None:
+        self.context.reset()
 
     def train(self) -> None:
         """Perform one gradient step of the network"""
@@ -170,24 +188,14 @@ class DqnAgent:
         """Hard update where we copy the network parameters from the policy network to the target network"""
         self.target_network.load_state_dict(self.policy_network.state_dict())
 
-    def context_reset(self) -> None:
-        self.context.reset()
-
-    def add_obs_to_context(self, obs: np.ndarray) -> None:
-        self.context.add_obs(obs)
-
-    def complete_context_transition(
-        self, next_obs: np.ndarray, action: int, reward: float, buffer_done: bool
-    ) -> None:
-        self.context.complete_transition(next_obs, action, reward, buffer_done)
-
     def save_mini_checkpoint(self, checkpoint_dir: str, wandb_id: str) -> None:
         torch.save(
             {"step": self.num_train_steps, "wandb_id": wandb_id},
             checkpoint_dir + "_mini_checkpoint.pt",
         )
 
-    def load_mini_checkpoint(self, checkpoint_dir: str) -> dict:
+    @staticmethod
+    def load_mini_checkpoint(checkpoint_dir: str) -> dict:
         return torch.load(checkpoint_dir + "_mini_checkpoint.pt")
 
     def save_checkpoint(
@@ -247,7 +255,9 @@ class DqnAgent:
             self.replay_buffer.episode_lengths, checkpoint_dir + "buffer_eplens.sav"
         )
 
-    def load_checkpoint(self, checkpoint_dir: str) -> None:
+    def load_checkpoint(
+        self, checkpoint_dir: str
+    ) -> Tuple[str, RunningAverage, RunningAverage, RunningAverage, float]:
         checkpoint = torch.load(checkpoint_dir + "_checkpoint.pt")
         # checkpoint = np.load(checkpoint_dir + "_checkpoint.npz", allow_pickle=True)
 

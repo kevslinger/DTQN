@@ -58,24 +58,39 @@ class DrqnAgent(DqnAgent):
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
-        self.context = Context(context_len, obs_mask, num_actions, env_obs_length)
-        self.context.update_hidden(hidden_states)
+        self.train_context = Context(
+            context_len,
+            obs_mask,
+            num_actions,
+            env_obs_length,
+            init_hidden=hidden_states,
+        )
+        self.eval_context = Context(
+            context_len,
+            obs_mask,
+            num_actions,
+            env_obs_length,
+            init_hidden=hidden_states,
+        )
 
-    # TODO: How to interoperate context and pad_packed
-    def store_transition(self, cur_obs, obs, action, reward, done, timestep):
-        self.context.add(cur_obs, obs, action, reward, done)
-        o, o_n, a, r, d = self.context.export()
-        self.replay_buffer.store(o, o_n, a, r, d, min(self.context_len, timestep + 1))
+    def observe(self, obs, next_obs, action, reward, done):
+        self.context.add_transition(obs, next_obs, action, reward, done)
+        if self.train_mode:
+            o, n_o, a, r, d = self.context.export()
+            self.replay_buffer.store(
+                o, n_o, a, r, d, min(self.context_len, self.context.timestep + 1) # TODO: Is +1 necessary?
+            )
 
     @torch.no_grad()
-    def get_action(self, context: Context, epsilon=0.0):
-        q_values, hidden = self.policy_network(
+    def get_action(self, obs: np.ndarray, epsilon=0.0):
+        q_values, self.context.hidden = self.policy_network(
             torch.as_tensor(
-                context.obs[-1], dtype=self.obs_tensor_type, device=self.device
+                obs,
+                dtype=self.obs_tensor_type,
+                device=self.device,
             ).reshape(1, 1, self.env_obs_length),
-            hidden_states=context.hidden,
+            hidden_states=self.context.hidden,
         )
-        context.update_hidden(hidden)
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         else:
