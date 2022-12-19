@@ -13,15 +13,6 @@ from utils.random import set_global_seed
 from utils.logging_utils import RunningAverage, get_logger, timestamp
 
 
-try:
-    import gym_pomdps
-except ImportError:
-    print(
-        "WARNING: ``gym_pomdps`` is not installed. This means you cannot run an experiment with the HeavenHell or "
-        "Hallway domain. "
-    )
-
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
