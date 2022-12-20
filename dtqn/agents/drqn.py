@@ -73,7 +73,7 @@ class DrqnAgent(DqnAgent):
             init_hidden=hidden_states,
         )
 
-    def observe(self, obs, next_obs, action, reward, done):
+    def observe(self, obs, next_obs, action, reward, done) -> None:
         self.context.add_transition(obs, next_obs, action, reward, done)
         if self.train_mode:
             o, n_o, a, r, d = self.context.export()
@@ -82,7 +82,7 @@ class DrqnAgent(DqnAgent):
             )
 
     @torch.no_grad()
-    def get_action(self, obs: np.ndarray, epsilon=0.0):
+    def get_action(self, obs: np.ndarray, epsilon=0.0) -> int:
         q_values, self.context.hidden = self.policy_network(
             torch.as_tensor(
                 obs,

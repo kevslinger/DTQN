@@ -89,16 +89,16 @@ class DqnAgent:
         )
 
     @property
-    def context(self):
+    def context(self) -> Context:
         return self.train_context if self.train_mode else self.eval_context
 
-    def eval_on(self):
+    def eval_on(self) -> None:
         self.train_mode = False
-        self.policy_network.train()
-
-    def eval_off(self):
-        self.train_mode = True
         self.policy_network.eval()
+
+    def eval_off(self) -> None:
+        self.train_mode = True
+        self.policy_network.train()
 
     @torch.no_grad()
     def get_action(self, obs: np.ndarray, epsilon=0.0) -> int:
@@ -121,6 +121,7 @@ class DqnAgent:
         """Perform one gradient step of the network"""
         if not self.replay_buffer.can_sample(self.batch_size):
             return
+
         self.eval_off()
         obss, actions, rewards, next_obss, dones, _ = self.replay_buffer.sample(
             self.batch_size
