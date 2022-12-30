@@ -4,7 +4,9 @@ from gym.envs.registration import register
 try:
     import gym_gridverse
 except ImportError:
-    print("WARNING: ``gym_gridverse`` is not installed. This means you cannot run an experiment with the gv_*.yaml domains.")
+    print(
+        "WARNING: ``gym_gridverse`` is not installed. This means you cannot run an experiment with the gv_*.yaml domains."
+    )
 
 try:
     import gym_pomdps
@@ -157,5 +159,5 @@ register(
     id="MH-maze-v1",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": None, "obs_crop": 3, "des_file": des_maze_v0},
-    max_episode_steps=180
+    max_episode_steps=180,
 )

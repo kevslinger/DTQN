@@ -16,11 +16,28 @@ def reshape(obs: np.ndarray) -> np.ndarray:
 
 
 class MiniHackWrapper(gym.Wrapper):
-    def __init__(self, env_id: str, obs_type: str = "glyphs_crop", obs_crop: int = 9, des_file: str = None):
+    def __init__(
+        self,
+        env_id: str,
+        obs_type: str = "glyphs_crop",
+        obs_crop: int = 9,
+        des_file: str = None,
+    ):
         if des_file:
-            env = gym.make('MiniHack-Navigation-Custom-v0', des_file=des_file, observation_keys=(obs_type,), obs_crop_h=obs_crop, obs_crop_w=obs_crop)
+            env = gym.make(
+                "MiniHack-Navigation-Custom-v0",
+                des_file=des_file,
+                observation_keys=(obs_type,),
+                obs_crop_h=obs_crop,
+                obs_crop_w=obs_crop,
+            )
         else:
-            env = gym.make(env_id, observation_keys=(obs_type,), obs_crop_h=obs_crop, obs_crop_w=obs_crop)
+            env = gym.make(
+                env_id,
+                observation_keys=(obs_type,),
+                obs_crop_h=obs_crop,
+                obs_crop_w=obs_crop,
+            )
         super().__init__(env)
         self.obs_type = obs_type
         # env.observation_space['glyphs_crop'].shape = (7, 7)
