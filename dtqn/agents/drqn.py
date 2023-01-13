@@ -17,6 +17,7 @@ class DrqnAgent(DqnAgent):
         buffer_size: int,
         device: torch.device,
         env_obs_length: int,
+        max_env_steps: int,
         obs_mask: Union[int, float],
         num_actions: int,
         is_discrete_env: bool,
@@ -35,6 +36,7 @@ class DrqnAgent(DqnAgent):
             buffer_size,
             device,
             env_obs_length,
+            max_env_steps,
             obs_mask,
             num_actions,
             is_discrete_env,
@@ -73,12 +75,18 @@ class DrqnAgent(DqnAgent):
             init_hidden=hidden_states,
         )
 
-    def observe(self, obs, next_obs, action, reward, done) -> None:
-        self.context.add_transition(obs, next_obs, action, reward, done)
+    def observe(self, obs, action, reward, done) -> None:
+        self.context.add_transition(obs, action, reward, done)
         if self.train_mode:
-            o, n_o, a, r, d = self.context.export()
+            o, a, r, d = self.context.export()
             self.replay_buffer.store(
-                o, n_o, a, r, d, min(self.context_len, self.context.timestep + 1) # TODO: Is +1 necessary?
+                o,
+                a,
+                r,
+                d,
+                min(
+                    self.context_len, self.context.timestep + 1
+                ),  # TODO: Is +1 necessary?
             )
 
     @torch.no_grad()

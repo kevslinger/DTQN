@@ -27,20 +27,6 @@ from enum import Enum
 from typing import Tuple
 
 
-class ObsType(Enum):
-    DISCRETE = 0
-    CONTINUOUS = 1
-
-
-def get_env_obs_type(obs_space: spaces.Space) -> int:
-    if isinstance(
-        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
-    ):
-        return ObsType.DISCRETE
-    else:
-        return ObsType.CONTINUOUS
-
-
 def make_env(id_or_path: str) -> GymEnvironment:
     """Makes a GV gym environment."""
     try:
@@ -70,9 +56,36 @@ def make_env(id_or_path: str) -> GymEnvironment:
     return env
 
 
+class ObsType(Enum):
+    DISCRETE = 0
+    CONTINUOUS = 1
+    IMAGE = 2
+
+
+def get_env_obs_type(env: gym.Env) -> int:
+    obs_space = env.observation_space
+    sample_obs = env.reset()
+    # Check for image first
+    if (
+        (isinstance(sample_obs, np.ndarray) and len(sample_obs.shape) == 3)
+        and isinstance(obs_space, spaces.Box)
+        and np.all(obs_space.low == 0)
+        and np.all(obs_space.high == 255)
+    ):
+        return ObsType.IMAGE
+    elif isinstance(
+        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+    ):
+        return ObsType.DISCRETE
+    else:
+        return ObsType.CONTINUOUS
+
+
 def get_env_obs_length(env: gym.Env) -> int:
     """Gets the length of the observations in an environment"""
-    if isinstance(env.observation_space, gym.spaces.Discrete):
+    if get_env_obs_type(env) == ObsType.IMAGE:
+        return env.reset().shape
+    elif isinstance(env.observation_space, gym.spaces.Discrete):
         return 1
     elif isinstance(env.observation_space, (gym.spaces.MultiDiscrete, gym.spaces.Box)):
         if len(env.observation_space.shape) != 1:
@@ -90,6 +103,9 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
     lowest possible observation (while still being finite) so the
     network knows it is padding.
     """
+    # Check image first
+    if get_env_obs_type(env) == ObsType.IMAGE:
+        return 0
     if isinstance(env.observation_space, gym.spaces.Discrete):
         return env.observation_space.n
     elif isinstance(env.observation_space, gym.spaces.MultiDiscrete):
@@ -102,6 +118,17 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
         return -5
     else:
         raise NotImplementedError(f"We do not yet support {env.observation_space}")
+
+
+def get_env_max_steps(env: gym.Env) -> Union[int, None]:
+    """Gets the maximum steps allowed in an episode before auto-terminating"""
+    try:
+        return env._max_episode_steps
+    except AttributeError:
+        try:
+            return env.max_episode_steps
+        except AttributeError:
+            return None
 
 
 # noinspection PyAttributeOutsideInit
@@ -132,16 +159,19 @@ class Context:
         self.done_mask = True
         self.timestep = 0
         self.init_hidden = init_hidden
-        self.reset()
 
-    def reset(self):
+    def reset(self, obs: np.ndarray):
         """Resets to a fresh context"""
-        self.obs = np.array(
-            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
-        )
-        self.next_obs = np.array(
-            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
-        )
+        if isinstance(self.env_obs_length, tuple):
+            self.obs = np.full(
+                [self.max_length + 1, *self.env_obs_length],
+                self.obs_mask,
+                dtype=np.uint8,
+            )
+        else:
+            self.obs = np.full(
+                [self.max_length + 1, self.env_obs_length], self.obs_mask
+            )
         self.action = np.array(
             [np.array([np.random.randint(self.num_actions)])] * self.max_length,
         )
@@ -153,20 +183,23 @@ class Context:
         )
         self.hidden = self.init_hidden
         self.timestep = 0
+        # Initial observation
+        self.obs[0] = obs
 
-    def add_transition(
-        self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
-    ) -> None:
+    def add_transition(self, o: np.ndarray, a: int, r: float, done: bool) -> None:
         """Add an entire transition. If the context is full, evict the oldest transition"""
-        self.obs = self.roll(self.obs)
-        self.next_obs = self.roll(self.next_obs)
+        # TODO: need to roll specially because it is 1 longer
+        self.obs = (
+            np.roll(self.obs, -1, axis=0)
+            if self.timestep >= self.max_length + 1
+            else self.obs
+        )
         self.action = self.roll(self.action)
         self.reward = self.roll(self.reward)
         self.done = self.roll(self.done)
 
         t = min(self.timestep, self.max_length - 1)
-        self.obs[t] = o
-        self.next_obs[t] = next_o
+        self.obs[t + 1] = o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
@@ -176,12 +209,13 @@ class Context:
         self,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Export the context"""
+        current_timestep = min(self.timestep, self.max_length) - 1
         return (
-            self.obs,
-            self.next_obs,
-            self.action,
-            self.reward,
-            self.done,
+            self.obs[current_timestep],
+            # self.next_obs[current_timestep],
+            self.action[current_timestep],
+            self.reward[current_timestep],
+            self.done[current_timestep],
         )
 
     def hist_with_obs(self, obs: np.ndarray) -> np.ndarray:

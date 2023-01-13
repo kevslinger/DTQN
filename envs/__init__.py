@@ -52,7 +52,6 @@ register(
 # MINI HACK #
 #############
 
-
 register(
     id="MH-Room-5-v0",
     entry_point="envs.mini_hack:MiniHackWrapper",
@@ -64,6 +63,13 @@ register(
     id="MH-Room-5-v1",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-Room-5x5-v0", "obs_crop": 3},
+    max_episode_steps=100,
+)
+
+register(
+    id="MH-room-5-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-Room-5x5-v0", "obs_type": "pixel_crop"},
     max_episode_steps=100,
 )
 
@@ -82,6 +88,13 @@ register(
 )
 
 register(
+    id="MH-DarkRoom-5-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-Room-Dark-5x5-v0", "obs_type": "pixel_crop"},
+    max_episode_steps=100,
+)
+
+register(
     id="MH-Room-15-v0",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-Room-15x15-v0"},
@@ -92,6 +105,13 @@ register(
     id="MH-Room-15-v1",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-Room-15x15-v0", "obs_crop": 3},
+    max_episode_steps=300,
+)
+
+register(
+    id="MH-Room-15-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-Room-15x15-v0", "obs_type": "pixel_crop"},
     max_episode_steps=300,
 )
 
@@ -110,6 +130,13 @@ register(
 )
 
 register(
+    id="MH-DarkRoom-15-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-Room-Dark-15x15-v0", "obs_type": "pixel_crop"},
+    max_episode_steps=300,
+)
+
+register(
     id="MH-Maze-9-v0",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-MazeWalk-9x9-v0"},
@@ -124,6 +151,13 @@ register(
 )
 
 register(
+    id="MH-Maze-9-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-MazeWalk-9x9-v0", "obs_type": "pixel_crop"},
+    max_episode_steps=180,
+)
+
+register(
     id="MH-MazeMap-9-v0",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-MazeWalk-Mapped-9x9-v0"},
@@ -134,6 +168,13 @@ register(
     id="MH-MazeMap-9-v1",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-MazeWalk-Mapped-9x9-v0", "obs_crop": 3},
+    max_episode_steps=180,
+)
+
+register(
+    id="MH-MazeMap-9-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": "MiniHack-MazeWalk-9x9-v0", "obs_type": "pixel_crop"},
     max_episode_steps=180,
 )
 
@@ -159,5 +200,12 @@ register(
     id="MH-maze-v1",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": None, "obs_crop": 3, "des_file": des_maze_v0},
+    max_episode_steps=180,
+)
+
+register(
+    id="MH-maze-v2",
+    entry_point="envs.mini_hack:MiniHackWrapper",
+    kwargs={"env_id": None, "obs_type": "pixel_crop", "des_file": des_maze_v0},
     max_episode_steps=180,
 )

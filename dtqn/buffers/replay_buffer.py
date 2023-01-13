@@ -1,6 +1,6 @@
 import numpy as np
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 
 class ReplayBuffer:
@@ -15,59 +15,98 @@ class ReplayBuffer:
     """
 
     def __init__(
-        self, buffer_size: int, env_obs_length: int, context_len: Optional[int] = 1
+        self,
+        buffer_size: int,
+        env_obs_length: Union[int, Tuple],
+        max_episode_steps: int,
+        context_len: Optional[int] = 1,
     ):
-        self.max_size = buffer_size
+        self.max_size = buffer_size // max_episode_steps
         self.context_len = context_len
-        self.pos = 0
+        self.pos = [0, 0]
 
-        self.obss = np.zeros(
-            [buffer_size, self.context_len, env_obs_length], dtype=np.float32
+        # Image domains
+        if isinstance(env_obs_length, tuple):
+            self.obss = np.zeros(
+                [
+                    self.max_size,
+                    max_episode_steps + 1,
+                    *env_obs_length,
+                ],
+                dtype=np.uint8,
+            )
+        else:
+            self.obss = np.zeros(
+                [
+                    self.max_size,
+                    max_episode_steps + 1,
+                    env_obs_length,
+                ],
+                dtype=np.float32,
+            )
+
+        self.actions = np.zeros(
+            [self.max_size, max_episode_steps + 1, 1],
+            dtype=np.uint8,
         )
-        self.next_obss = np.zeros(
-            [buffer_size, self.context_len, env_obs_length], dtype=np.float32
+        self.rewards = np.zeros(
+            [self.max_size, max_episode_steps + 1, 1],
+            dtype=np.float32,
         )
-        self.actions = np.zeros([buffer_size, self.context_len, 1], dtype=np.uint8)
-        self.rewards = np.zeros([buffer_size, self.context_len, 1], dtype=np.float32)
-        self.dones = np.zeros([buffer_size, self.context_len, 1], dtype=np.bool_)
-        self.episode_lengths = np.zeros([buffer_size], dtype=np.uint8)
+        self.dones = np.zeros(
+            [self.max_size, max_episode_steps + 1, 1],
+            dtype=np.bool_,
+        )
+        self.episode_lengths = np.zeros([self.max_size], dtype=np.uint8)
 
     def store(
         self,
         obs: np.ndarray,
-        next_obs: np.ndarray,
         action: np.ndarray,
         reward: np.ndarray,
         done: np.ndarray,
         episode_length: Optional[int] = 0,
     ) -> None:
-        idx = self.pos % self.max_size
-        self.obss[idx] = obs
-        self.next_obss[idx] = next_obs
-        self.actions[idx] = action
-        self.rewards[idx] = reward
-        self.dones[idx] = done
-        self.episode_lengths[idx] = episode_length
-        self.pos += 1
+        episode_idx = self.pos[0] % self.max_size
+        obs_idx = self.pos[1]
+        self.obss[episode_idx, obs_idx] = obs
+        self.actions[episode_idx, obs_idx] = action
+        self.rewards[episode_idx, obs_idx] = reward
+        self.dones[episode_idx, obs_idx] = done
+        self.episode_lengths[episode_idx] = episode_length
+        self.pos = [self.pos[0], self.pos[1] + 1]
 
     def can_sample(self, batch_size: int) -> bool:
-        return batch_size <= self.pos
+        return batch_size < self.pos[0]
 
-    def full(self) -> bool:
-        return self.pos >= self.max_size
+    def flush(self):
+        self.pos = [self.pos[0] + 1, 0]
 
     def sample(
         self, batch_size: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        idxes = [
-            random.randint(0, min(self.pos, self.max_size) - 1)
-            for _ in range(batch_size)
-        ]
+        episode_idxes = np.array(
+            [
+                [random.randint(0, min(self.pos[0], self.max_size) - 1)]
+                for _ in range(batch_size)
+            ]
+        )
+        transition_starts = np.array(
+            [
+                random.randint(
+                    0, max(0, self.episode_lengths[idx[0]] - self.context_len)
+                )
+                for idx in episode_idxes
+            ]
+        )
+        transitions = np.array(
+            [range(start, start + self.context_len) for start in transition_starts]
+        )
         return (
-            self.obss[idxes],
-            self.actions[idxes],
-            self.rewards[idxes],
-            self.next_obss[idxes],
-            self.dones[idxes],
-            self.episode_lengths[idxes],
+            self.obss[episode_idxes, transitions],
+            self.actions[episode_idxes, transitions],
+            self.rewards[episode_idxes, transitions],
+            self.obss[episode_idxes, 1 + transitions],
+            self.dones[episode_idxes, transitions],
+            self.episode_lengths[episode_idxes],
         )

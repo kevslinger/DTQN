@@ -66,21 +66,30 @@ class DTQN(nn.Module):
         self.obs_dim = obs_dim
         self.discrete = discrete
         # Input Embedding
-        if discrete:
-            self.obs_embedding = EmbeddingRepresentation.make_discrete_representation(
-                vocab_sizes=vocab_sizes,
-                obs_dim=obs_dim,
-                embed_per_obs_dim=embed_per_obs_dim,
-                outer_embed_size=inner_embed_size,
-            )
-        else:
-            self.obs_embedding = EmbeddingRepresentation.make_continuous_representation(
+        if isinstance(obs_dim, tuple):
+            self.obs_embedding = EmbeddingRepresentation.make_image_representation(
                 obs_dim=obs_dim, outer_embed_size=inner_embed_size
             )
+        else:
+            if discrete:
+                self.obs_embedding = (
+                    EmbeddingRepresentation.make_discrete_representation(
+                        vocab_sizes=vocab_sizes,
+                        obs_dim=obs_dim,
+                        embed_per_obs_dim=embed_per_obs_dim,
+                        outer_embed_size=inner_embed_size,
+                    )
+                )
+            else:
+                self.obs_embedding = (
+                    EmbeddingRepresentation.make_continuous_representation(
+                        obs_dim=obs_dim, outer_embed_size=inner_embed_size
+                    )
+                )
 
         # If pos is 0, the positional embeddings are just 0s. Otherwise, they become learnables that initialise as 0s
         try:
-            int(pos)
+            pos = int(pos)
             self.position_embedding = nn.Parameter(
                 torch.zeros(1, history_len, inner_embed_size),
                 requires_grad=False if pos == 0 else True,
@@ -144,7 +153,9 @@ class DTQN(nn.Module):
             module.weight.data.fill_(1.0)
 
     def forward(self, obss: torch.Tensor) -> torch.Tensor:
-        batch, history_len, obs_dim = obss.size()
+        history_len = obss.size(1)
+        # if the observations are images, obs_dim is the dimensions of the image
+        obs_dim = obss.size()[2:] if len(obss.size()) > 3 else obss.size(2)
         assert (
             history_len <= self.history_len
         ), "Cannot forward, history is longer than expected."

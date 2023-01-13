@@ -19,7 +19,7 @@ class MiniHackWrapper(gym.Wrapper):
     def __init__(
         self,
         env_id: str,
-        obs_type: str = "glyphs_crop",
+        obs_type: str = GLYPHS,
         obs_crop: int = 9,
         des_file: str = None,
     ):

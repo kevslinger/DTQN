@@ -40,6 +40,7 @@ def get_agent(
     learning_rate: float,
     batch_size: int,
     context_len: int,
+    max_env_steps: int,
     history: bool,
     target_update_frequency: int,
     gamma: float,
@@ -52,6 +53,8 @@ def get_agent(
 ):
     env_obs_length = env_processing.get_env_obs_length(env)
     env_obs_mask = env_processing.get_env_obs_mask(env)
+    if max_env_steps <= 0:
+        max_env_steps = env_processing.get_env_max_steps(env)
     if isinstance(env_obs_mask, np.ndarray):
         obs_vocab_size = env_obs_mask.max() + 1
     else:
@@ -103,6 +106,7 @@ def get_agent(
         buffer_size,
         device,
         env_obs_length,
+        max_env_steps,
         env_processing.get_env_obs_mask(env),
         env.action_space.n,
         is_discrete_env,
