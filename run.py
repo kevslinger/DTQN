@@ -159,6 +159,13 @@ def get_args():
         choices=[1, "1", 0, "0", "sin"],
         help="The type of positional encodings to use.",
     )
+    # For slurm
+    parser.add_argument(
+        "--slurm-job-id",
+        default=0,
+        type=str,
+        help="The `$SLURM_JOB_ID` assigned to this job",
+    )
 
     return parser.parse_args()
 

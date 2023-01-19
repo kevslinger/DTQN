@@ -12,10 +12,11 @@ class EmbeddingRepresentation(nn.Module):
         self.embedding = embedding
 
     def forward(self, obs: torch.Tensor):
+        batch, seq = obs.size(0), obs.size(1)
         # Flatten batch and seq dims
-        obs2 = torch.flatten(obs, start_dim=0, end_dim=1)
-        embed = self.embedding(obs2)
-        return embed.reshape(obs.size(0), obs.size(1), embed.size(1))
+        obs = torch.flatten(obs, start_dim=0, end_dim=1)
+        embed = self.embedding(obs)
+        return embed.reshape(batch, seq, embed.size(-1))
 
     @staticmethod
     def make_discrete_representation(
@@ -69,7 +70,6 @@ class EmbeddingRepresentation(nn.Module):
             outer_embed_size: The length of the resulting embedding vector.
         """
         # C x H x W or H x W
-        print(obs_dim)
         if len(obs_dim) == 3:
             num_channels = obs_dim[0]
         else:
@@ -78,18 +78,22 @@ class EmbeddingRepresentation(nn.Module):
         kernels = [3, 3, 3, 3, 3]
         paddings = [1, 1, 1, 1, 1]
         strides = [2, 1, 2, 1, 2]
-        flattened_size = compute_flattened_size(obs_dim[1], obs_dim[2], kernels, paddings, strides)
+        flattened_size = compute_flattened_size(
+            obs_dim[1], obs_dim[2], kernels, paddings, strides
+        )
         embedding = nn.Sequential(
             # Input 3 x 84 x 84
-            nn.Conv2d(num_channels, 64, kernel_size=kernels[0], padding=paddings[0], stride=strides[0]),
+            nn.Conv2d(
+                num_channels,
+                64,
+                kernel_size=kernels[0],
+                padding=paddings[0],
+                stride=strides[0],
+            ),
             nn.ReLU(True),
             #
             nn.Conv2d(
-                64,
-                64,
-                kernel_size=kernels[1],
-                padding=paddings[1],
-                stride=strides[1]
+                64, 64, kernel_size=kernels[1], padding=paddings[1], stride=strides[1]
             ),
             nn.ReLU(True),
             nn.Conv2d(
@@ -101,22 +105,20 @@ class EmbeddingRepresentation(nn.Module):
             ),
             nn.ReLU(True),
             nn.Conv2d(
-                64,
-                128,
-                kernel_size=kernels[3],
-                padding=paddings[3],
-                stride=strides[3]
+                64, 128, kernel_size=kernels[3], padding=paddings[3], stride=strides[3]
             ),
             nn.ReLU(True),
             nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True),
             nn.Flatten(),
-            nn.Linear(128 * flattened_size, outer_embed_size)
+            nn.Linear(128 * flattened_size, outer_embed_size),
         )
         return EmbeddingRepresentation(embedding=embedding)
 
 
-def compute_flattened_size(height: int, width: int, kernels: list, paddings: list, strides: list) -> int:
+def compute_flattened_size(
+    height: int, width: int, kernels: list, paddings: list, strides: list
+) -> int:
     for i in range(len(kernels)):
         height = update_size(height, kernels[i], paddings[i], strides[i])
         width = update_size(width, kernels[i], paddings[i], strides[i])

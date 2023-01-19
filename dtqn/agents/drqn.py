@@ -90,13 +90,13 @@ class DrqnAgent(DqnAgent):
             )
 
     @torch.no_grad()
-    def get_action(self, obs: np.ndarray, epsilon=0.0) -> int:
+    def get_action(self, epsilon: float = 0.0) -> int:
         q_values, self.context.hidden = self.policy_network(
             torch.as_tensor(
-                obs,
+                self.context.obs[min(self.context.timestep, self.context_len - 1)],
                 dtype=self.obs_tensor_type,
                 device=self.device,
-            ).reshape(1, 1, self.env_obs_length),
+            ).unsqueeze(0).unsqueeze(0),
             hidden_states=self.context.hidden,
         )
         if np.random.rand() < epsilon:

@@ -93,7 +93,6 @@ def get_agent(
             pos=pos,
             discrete=is_discrete_env,
             vocab_sizes=obs_vocab_size,
-            target_update_frequency=target_update_frequency,
         ).to(device)
 
     if "DTQN" not in model_str:

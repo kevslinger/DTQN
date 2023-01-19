@@ -67,7 +67,7 @@ register(
 )
 
 register(
-    id="MH-room-5-v2",
+    id="MH-Room-5-v2",
     entry_point="envs.mini_hack:MiniHackWrapper",
     kwargs={"env_id": "MiniHack-Room-5x5-v0", "obs_type": "pixel_crop"},
     max_episode_steps=100,
