@@ -103,12 +103,12 @@ class DqnAgent:
         self.policy_network.train()
 
     @torch.no_grad()
-    def get_action(self, obs: np.ndarray, epsilon=0.0) -> int:
+    def get_action(self, epsilon=0.0) -> int:
         """Use policy_network to get an e-greedy action given the current obs."""
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         q_values = self.policy_network(
-            torch.as_tensor(obs, dtype=self.obs_tensor_type, device=self.device)
+            torch.as_tensor(self.context.obs[min(self.context.timestep, self.context_len - 1)], dtype=self.obs_tensor_type, device=self.device).unsqueeze(0).unsqueeze(0)
         )
         return torch.argmax(q_values).item()
 
@@ -130,17 +130,17 @@ class DqnAgent:
             self.batch_size
         )
 
-        # We pull obss/next_obss as [batch-size x 1 x obs-dim] so we need to squeeze it
+        # We pull obss/next_obss as [batch-size x 1 x obs-dim]
         obss = torch.as_tensor(
             obss, dtype=self.obs_tensor_type, device=self.device
-        ).squeeze()
+        )
         next_obss = torch.as_tensor(
             next_obss, dtype=self.obs_tensor_type, device=self.device
-        ).squeeze()
+        )
         # Actions is [batch-size x 1 x 1] which we want to be [batch-size x 1]
         actions = torch.as_tensor(
             actions, dtype=torch.long, device=self.device
-        ).squeeze(dim=1)
+        )
         # Rewards/Dones are [batch-size x 1 x 1] which we want to be [batch-size]
         rewards = torch.as_tensor(
             rewards, dtype=torch.float32, device=self.device
@@ -149,15 +149,17 @@ class DqnAgent:
 
         # obss is [batch-size x obs-dim] and after network is [batch-size x action-dim]
         # Then we gather it and squeeze to [batch-size]
-        q_values = self.policy_network(obss).gather(1, actions).squeeze()
+        q_values = self.policy_network(obss)
+        # [batch-seq-actions]
+        q_values = q_values.gather(2, actions).squeeze()
 
         with torch.no_grad():
             # We use DDQN, so the policy network determines which future actions we'd
             # take, but the target network determines the value of those
             next_obs_qs = self.policy_network(next_obss)
-            argmax = torch.argmax(next_obs_qs, axis=1).unsqueeze(-1)
+            argmax = torch.argmax(next_obs_qs, axis=-1).unsqueeze(-1)
             next_obs_q_values = (
-                self.target_network(next_obss).gather(1, argmax).squeeze()
+                self.target_network(next_obss).gather(2, argmax).squeeze()
             )
 
             # here goes BELLMAN
@@ -249,9 +251,6 @@ class DqnAgent:
             checkpoint_dir + "_checkpoint.pt",
         )
         joblib.dump(self.replay_buffer.obss, checkpoint_dir + "buffer_obss.sav")
-        joblib.dump(
-            self.replay_buffer.next_obss, checkpoint_dir + "buffer_next_obss.sav"
-        )
         joblib.dump(self.replay_buffer.actions, checkpoint_dir + "buffer_actions.sav")
         joblib.dump(self.replay_buffer.rewards, checkpoint_dir + "buffer_rewards.sav")
         joblib.dump(self.replay_buffer.dones, checkpoint_dir + "buffer_dones.sav")
@@ -269,9 +268,6 @@ class DqnAgent:
         # Replay Buffer
         self.replay_buffer.pos = checkpoint["replay_buffer_pos"]
         self.replay_buffer.obss = joblib.load(checkpoint_dir + "buffer_obss.sav")
-        self.replay_buffer.next_obss = joblib.load(
-            checkpoint_dir + "buffer_next_obss.sav"
-        )
         self.replay_buffer.actions = joblib.load(checkpoint_dir + "buffer_actions.sav")
         self.replay_buffer.rewards = joblib.load(checkpoint_dir + "buffer_rewards.sav")
         self.replay_buffer.dones = joblib.load(checkpoint_dir + "buffer_dones.sav")

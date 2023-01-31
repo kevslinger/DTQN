@@ -82,7 +82,7 @@ class DtqnAgent(DrqnAgent):
             context_tensor,
             torch.as_tensor(
                 self.bag.bag, dtype=self.obs_tensor_type, device=self.device
-            )
+            ).unsqueeze(0)
             if self.bag_size > 0
             else None,
         )
@@ -126,7 +126,7 @@ class DtqnAgent(DrqnAgent):
                         np.concatenate([self.bag.bag, np.expand_dims(evicted_obs, 0)]),
                         dtype=self.obs_tensor_type,
                         device=self.device,
-                    ),
+                    ).unsqueeze(0),
                 )
 
                 bag_idx = torch.argmin(torch.mean(torch.flatten(torch.cdist(q_values, baseline_q_values, p=1), start_dim=1), 1))

@@ -10,7 +10,7 @@ class DRQN(DQN):
 
     def __init__(
         self,
-        input_shape: int,
+        obs_dim: int,
         num_actions: int,
         embed_per_obs_dim: int,
         inner_embed: int,
@@ -19,7 +19,7 @@ class DRQN(DQN):
         **kwargs
     ) -> None:
         super().__init__(
-            input_shape=input_shape,
+            obs_dim=obs_dim,
             num_actions=num_actions,
             embed_per_obs_dim=embed_per_obs_dim,
             inner_embed_size=inner_embed,
@@ -59,7 +59,7 @@ class DRQN(DQN):
         else:
             context_length = x.size(1)
             packed_sequence = rnn.pack_padded_sequence(
-                x, episode_lengths, enforce_sorted=False, batch_first=True
+                x, episode_lengths.squeeze(), enforce_sorted=False, batch_first=True
             )
             packed_output, new_hidden = self.lstm(packed_sequence)
             lstm_out, _ = rnn.pad_packed_sequence(

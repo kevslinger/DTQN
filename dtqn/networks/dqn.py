@@ -9,7 +9,7 @@ class DQN(nn.Module):
 
     def __init__(
         self,
-        input_shape: int,
+        obs_dim: int,
         num_actions: int,
         embed_per_obs_dim: int,
         inner_embed_size: int,
@@ -18,17 +18,23 @@ class DQN(nn.Module):
         **kwargs,
     ):
         super().__init__()
-        if is_discrete_env:
-            self.obs_embed = EmbeddingRepresentation.make_discrete_representation(
-                vocab_sizes=obs_vocab_size,
-                obs_dim=input_shape,
-                embed_per_obs_dim=embed_per_obs_dim,
-                outer_embed_size=inner_embed_size,
+        # Input Embedding
+        if isinstance(obs_dim, tuple):
+            self.obs_embed = EmbeddingRepresentation.make_image_representation(
+                obs_dim=obs_dim, outer_embed_size=inner_embed_size
             )
         else:
-            self.obs_embed = EmbeddingRepresentation.make_continuous_representation(
-                obs_dim=input_shape, outer_embed_size=inner_embed_size
-            )
+            if is_discrete_env:
+                self.obs_embed = EmbeddingRepresentation.make_discrete_representation(
+                    vocab_sizes=obs_vocab_size,
+                    obs_dim=obs_dim,
+                    embed_per_obs_dim=embed_per_obs_dim,
+                    outer_embed_size=inner_embed_size,
+                )
+            else:
+                self.obs_embed = EmbeddingRepresentation.make_continuous_representation(
+                    obs_dim=obs_dim, outer_embed_size=inner_embed_size
+                )
 
         self.ffn = nn.Sequential(
             nn.Linear(inner_embed_size, inner_embed_size),

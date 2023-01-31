@@ -94,14 +94,14 @@ def get_args():
     parser.add_argument(
         "--inembed",
         type=int,
-        default=64,
+        default=128,
         help="The dimensionality of the network. In the transformer, this is referred to as `d_model`.",
     )
     parser.add_argument(
         "--max-episode-steps",
         type=int,
         default=-1,
-        help="The maximum number of steps an agent can take in an environment before timeout.",
+        help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will be inferred. Otherwise, this argument must be supplied.",
     )
     parser.add_argument("--seed", type=int, default=1, help="The random seed to use.")
     parser.add_argument(
@@ -162,6 +162,13 @@ def get_args():
     parser.add_argument(
         "--bag-size", type=int, default=0, help="The size of the persistent memory bag."
     )
+    # For slurm
+    parser.add_argument(
+        "--slurm-job-id",
+        default=0,
+        type=str,
+        help="The `$SLURM_JOB_ID` assigned to this job",
+    )
 
     return parser.parse_args()
 
@@ -176,7 +183,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
     total_steps = 0
 
     for _ in range(eval_episodes):
-        agent.context_reset(eval_env.reset())
+        agent.context.reset(eval_env.reset())
         done = False
         ep_reward = 0
         if render:
@@ -303,7 +310,7 @@ def step(agent, env, eps):
 def prepopulate(agent, prepop_steps, env: Env):
     timestep = 0
     while timestep < prepop_steps:
-        agent.context_reset(env.reset())
+        agent.context.reset(env.reset())
         done = False
         while not done:
             action = env.action_space.sample()

@@ -27,20 +27,6 @@ from enum import Enum
 from typing import Tuple
 
 
-class ObsType(Enum):
-    DISCRETE = 0
-    CONTINUOUS = 1
-
-
-def get_env_obs_type(obs_space: spaces.Space) -> int:
-    if isinstance(
-        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
-    ):
-        return ObsType.DISCRETE
-    else:
-        return ObsType.CONTINUOUS
-
-
 def make_env(id_or_path: str) -> GymEnvironment:
     """Makes a GV gym environment."""
     try:
@@ -70,9 +56,36 @@ def make_env(id_or_path: str) -> GymEnvironment:
     return env
 
 
+class ObsType(Enum):
+    DISCRETE = 0
+    CONTINUOUS = 1
+    IMAGE = 2
+
+
+def get_env_obs_type(env: gym.Env) -> int:
+    obs_space = env.observation_space
+    sample_obs = env.reset()
+    # Check for image first
+    if (
+        (isinstance(sample_obs, np.ndarray) and len(sample_obs.shape) == 3)
+        and isinstance(obs_space, spaces.Box)
+        and np.all(obs_space.low == 0)
+        and np.all(obs_space.high == 255)
+    ):
+        return ObsType.IMAGE
+    elif isinstance(
+        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+    ):
+        return ObsType.DISCRETE
+    else:
+        return ObsType.CONTINUOUS
+
+
 def get_env_obs_length(env: gym.Env) -> int:
     """Gets the length of the observations in an environment"""
-    if isinstance(env.observation_space, gym.spaces.Discrete):
+    if get_env_obs_type(env) == ObsType.IMAGE:
+        return env.reset().shape
+    elif isinstance(env.observation_space, gym.spaces.Discrete):
         return 1
     elif isinstance(env.observation_space, (gym.spaces.MultiDiscrete, gym.spaces.Box)):
         if len(env.observation_space.shape) != 1:
@@ -90,6 +103,9 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
     lowest possible observation (while still being finite) so the
     network knows it is padding.
     """
+    # Check image first
+    if get_env_obs_type(env) == ObsType.IMAGE:
+        return 0
     if isinstance(env.observation_space, gym.spaces.Discrete):
         return env.observation_space.n
     elif isinstance(env.observation_space, gym.spaces.MultiDiscrete):
