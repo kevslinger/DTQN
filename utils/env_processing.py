@@ -104,6 +104,17 @@ def get_env_obs_mask(env: gym.Env) -> Union[int, np.ndarray]:
         raise NotImplementedError(f"We do not yet support {env.observation_space}")
 
 
+def get_env_max_steps(env: gym.Env) -> Union[int, None]:
+    """Gets the maximum steps allowed in an episode before auto-terminating"""
+    try:
+        return env._max_episode_steps
+    except AttributeError:
+        try:
+            return env.max_episode_steps
+        except AttributeError:
+            return None
+
+
 # noinspection PyAttributeOutsideInit
 class Context:
     """A Dataclass dedicated to storing the agent's history (up to the previous `max_length` transitions)
@@ -132,16 +143,23 @@ class Context:
         self.done_mask = True
         self.timestep = 0
         self.init_hidden = init_hidden
-        self.reset()
 
-    def reset(self):
+    def reset(self, obs: np.ndarray):
         """Resets to a fresh context"""
-        self.obs = np.array(
-            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
-        )
-        self.next_obs = np.array(
-            [np.array([self.obs_mask] * self.env_obs_length)] * self.max_length,
-        )
+        # Account for images
+        if isinstance(self.env_obs_length, tuple):
+            self.obs = np.full(
+                [self.max_length + 1, *self.env_obs_length],
+                self.obs_mask,
+                dtype=np.uint8,
+            )
+        else:
+            self.obs = np.full(
+                [self.max_length + 1, self.env_obs_length], self.obs_mask
+            )
+        # Initial observation
+        self.obs[0] = obs
+
         self.action = np.array(
             [np.array([np.random.randint(self.num_actions)])] * self.max_length,
         )
@@ -155,33 +173,43 @@ class Context:
         self.timestep = 0
 
     def add_transition(
-        self, o: np.ndarray, next_o: np.ndarray, a: int, r: float, done: bool
-    ) -> None:
+        self, o: np.ndarray, a: int, r: float, done: bool
+    ) -> Union[np.ndarray, None]:
         """Add an entire transition. If the context is full, evict the oldest transition"""
-        self.obs = self.roll(self.obs)
-        self.next_obs = self.roll(self.next_obs)
+        # Need to roll specially because it is 1 longer
+        self.obs = (
+            np.roll(self.obs, -1, axis=0)
+            if self.timestep >= self.max_length + 1
+            else self.obs
+        )
         self.action = self.roll(self.action)
         self.reward = self.roll(self.reward)
         self.done = self.roll(self.done)
 
         t = min(self.timestep, self.max_length - 1)
-        self.obs[t] = o
-        self.next_obs[t] = next_o
+
+        # If we are going to evict an observation, we need to return it for possibly adding to the bag
+        evicted_obs = None
+        if np.any(np.asarray(self.obs[t + 1] != self.obs_mask)):
+            evicted_obs = self.obs[t + 1].copy()
+
+        self.obs[t + 1] = o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
         self.timestep += 1
+        return evicted_obs
 
     def export(
         self,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Export the context"""
+        current_timestep = min(self.timestep, self.max_length) - 1
         return (
-            self.obs,
-            self.next_obs,
-            self.action,
-            self.reward,
-            self.done,
+            self.obs[current_timestep],
+            self.action[current_timestep],
+            self.reward[current_timestep],
+            self.done[current_timestep],
         )
 
     def hist_with_obs(self, obs: np.ndarray) -> np.ndarray:
@@ -199,16 +227,20 @@ class Context:
         self.hidden = hidden
 
     @property
-    def last_action(self):
+    def last_action(self) -> int:
         """Get the last action taken"""
         return self.action[-1][0]
 
     @property
-    def obs_history(self):
+    def obs_history(self) -> np.ndarray:
         """Get the agent's observation history.
 
         NOTE: We typically use this once we've seen an observation but before completing a context. That's why we're using `self.timestep+1`"""
         return self.obs[: self.timestep + 1]
+
+    @property
+    def is_full(self) -> bool:
+        return self.timestep > self.max_length
 
     @staticmethod
     def context_like(context):
@@ -220,3 +252,44 @@ class Context:
             context.env_obs_length,
             init_hidden=context.init_hidden,
         )
+
+
+class Bag:
+    """A Dataclass dedicated to storing important observations that would have fallen out of the agent's context
+
+    Args:
+        bag_size: Size of bag
+        obs_mask: The mask to use to indicate the observation is padding
+        obs_length: shape of an observation
+    """
+
+    def __init__(self, bag_size: int, obs_mask: Union[int, float], obs_length: int):
+        self.bag_size = bag_size
+        self.obs_mask = obs_mask
+        self.obs_length = obs_length
+        # Current position in bag
+        self.pos = 0
+
+        self.bag = self.make_empty_bag()
+
+    def reset(self) -> None:
+        self.pos = 0
+        self.bag = self.make_empty_bag()
+
+    def add(self, obs) -> bool:
+        if self.pos < self.bag_size:
+            self.bag[self.pos] = obs
+            self.pos += 1
+            return True
+        else:
+            # Reject adding the observation
+            return False
+
+    def make_empty_bag(self) -> np.ndarray:
+        return np.array(
+            [np.array([self.obs_mask] * self.obs_length)] * self.bag_size,
+        )
+
+    @property
+    def is_full(self) -> bool:
+        return self.pos < self.bag_size

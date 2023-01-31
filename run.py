@@ -97,6 +97,12 @@ def get_args():
         default=64,
         help="The dimensionality of the network. In the transformer, this is referred to as `d_model`.",
     )
+    parser.add_argument(
+        "--max-episode-steps",
+        type=int,
+        default=-1,
+        help="The maximum number of steps an agent can take in an environment before timeout.",
+    )
     parser.add_argument("--seed", type=int, default=1, help="The random seed to use.")
     parser.add_argument(
         "--save-policy",
@@ -153,6 +159,9 @@ def get_args():
         choices=[1, "1", 0, "0", "sin"],
         help="The type of positional encodings to use.",
     )
+    parser.add_argument(
+        "--bag-size", type=int, default=0, help="The size of the persistent memory bag."
+    )
 
     return parser.parse_args()
 
@@ -167,25 +176,22 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
     total_steps = 0
 
     for _ in range(eval_episodes):
-        agent.context.reset()
-        obs = eval_env.reset()
+        agent.context_reset(eval_env.reset())
         done = False
         ep_reward = 0
         if render:
             eval_env.render()
             time.sleep(0.5)
         while not done:
-            # context.add_obs(obs)
-            action = agent.get_action(obs, epsilon=0.0)
+            action = agent.get_action(epsilon=0.0)
             obs_next, reward, done, info = eval_env.step(action)
-            agent.observe(obs, obs_next, action, reward, done)
+            agent.observe(obs_next, action, reward, done)
             ep_reward += reward
             if render:
                 eval_env.render()
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 time.sleep(0.5)
-            obs = obs_next
         total_reward += ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
@@ -218,11 +224,10 @@ def train(
     verbose: bool = False,
 ):
     start_time = time()
-    agent.context_reset()
-    obs = env.reset()
+    agent.context_reset(env.reset())
 
     for timestep in range(agent.num_train_steps, total_steps):
-        obs = step(agent, env, obs, eps)
+        step(agent, env, eps)
 
         agent.train()
         eps.anneal()
@@ -278,8 +283,8 @@ def train(
             return
 
 
-def step(agent, env, obs, eps):
-    action = agent.get_action(obs, epsilon=eps.val)
+def step(agent, env, eps):
+    action = agent.get_action(epsilon=eps.val)
     next_obs, reward, done, info = env.step(action)
 
     # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
@@ -288,27 +293,24 @@ def step(agent, env, obs, eps):
     else:
         buffer_done = done
 
-    agent.observe(obs, next_obs, action, reward, buffer_done)
+    agent.observe(next_obs, action, reward, buffer_done)
 
     if done:
-        agent.context_reset()
-        next_obs = env.reset()
-
-    return next_obs
+        agent.context_reset(env.reset())
+        agent.replay_buffer.flush()
 
 
 def prepopulate(agent, prepop_steps, env: Env):
     timestep = 0
     while timestep < prepop_steps:
-        agent.context.reset()
-        obs = env.reset()
+        agent.context_reset(env.reset())
         done = False
         while not done:
             action = env.action_space.sample()
             next_obs, reward, done, _ = env.step(action)
-            agent.observe(obs, next_obs, action, reward, done)
+            agent.observe(next_obs, action, reward, done, bag=False)
             timestep += 1
-            obs = next_obs
+        agent.replay_buffer.flush()
 
 
 def run_experiment(args):
@@ -331,6 +333,7 @@ def run_experiment(args):
         args.lr,
         args.batch,
         args.context,
+        args.max_episode_steps,
         args.history,
         args.tuf,
         args.discount,
@@ -341,6 +344,7 @@ def run_experiment(args):
         args.identity,
         args.gate,
         args.pos,
+        args.bag_size,
     )
 
     print(

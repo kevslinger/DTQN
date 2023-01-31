@@ -21,6 +21,7 @@ class DqnAgent:
         buffer_size: int,
         device: torch.device,
         env_obs_length: int,
+        max_env_steps: int,
         obs_mask: Union[int, float],
         num_actions: int,
         is_discrete_env: bool,
@@ -58,6 +59,7 @@ class DqnAgent:
         self.replay_buffer = ReplayBuffer(
             buffer_size,
             env_obs_length=env_obs_length,
+            max_episode_steps=max_env_steps,
             context_len=context_len,
         )
 
@@ -110,12 +112,13 @@ class DqnAgent:
         )
         return torch.argmax(q_values).item()
 
-    def observe(self, obs, next_obs, action, reward, done) -> None:
+    def observe(self, obs, action, reward, done) -> None:
         if self.train_mode:
-            self.replay_buffer.store(obs, next_obs, action, reward, done)
+            self.replay_buffer.store(obs, action, reward, done)
 
-    def context_reset(self) -> None:
-        self.context.reset()
+    def context_reset(self, obs: np.ndarray) -> None:
+        self.context.reset(obs)
+        self.replay_buffer.store_obs(obs)
 
     def train(self) -> None:
         """Perform one gradient step of the network"""

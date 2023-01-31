@@ -40,6 +40,7 @@ def get_agent(
     learning_rate: float,
     batch_size: int,
     context_len: int,
+    max_env_steps: int,
     history: bool,
     target_update_frequency: int,
     gamma: float,
@@ -49,9 +50,12 @@ def get_agent(
     identity: bool = False,
     gate: str = "res",
     pos: int = 1,
+    bag_size: int = 0,
 ):
     env_obs_length = env_processing.get_env_obs_length(env)
     env_obs_mask = env_processing.get_env_obs_mask(env)
+    if max_env_steps <= 0:
+        max_env_steps = env_processing.get_env_max_steps(env)
     if isinstance(env_obs_mask, np.ndarray):
         obs_vocab_size = env_obs_mask.max() + 1
     else:
@@ -91,6 +95,7 @@ def get_agent(
             discrete=is_discrete_env,
             vocab_sizes=obs_vocab_size,
             target_update_frequency=target_update_frequency,
+            bag_size=bag_size,
         ).to(device)
 
     if "DTQN" not in model_str:
@@ -103,6 +108,7 @@ def get_agent(
         buffer_size,
         device,
         env_obs_length,
+        max_env_steps,
         env_processing.get_env_obs_mask(env),
         env.action_space.n,
         is_discrete_env,
@@ -113,4 +119,5 @@ def get_agent(
         embed_size=inner_embed,
         history=history,
         target_update_frequency=target_update_frequency,
+        bag_size=bag_size,
     )

@@ -60,6 +60,7 @@ class DTQN(nn.Module):
         pos: Union[str, int] = 1,
         discrete: bool = False,
         vocab_sizes: Optional[Union[np.ndarray, int]] = None,
+        bag_size: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -93,6 +94,11 @@ class DTQN(nn.Module):
                 )
             else:
                 raise AssertionError(f"pos must be either int or sin but was {pos}")
+
+        self.bag_embed = nn.Parameter(
+            torch.zeros(1, 1, inner_embed_size),
+            requires_grad=True if bag_size > 0 else False,
+        )
         self.dropout = nn.Dropout(dropout)
 
         if gate == "gru":
@@ -110,7 +116,7 @@ class DTQN(nn.Module):
                 transformer_block(
                     num_heads,
                     inner_embed_size,
-                    history_len,
+                    history_len + bag_size + 1,  # Need +1 for the bag eviction policy
                     dropout,
                     attn_gate,
                     mlp_gate,
@@ -160,3 +166,36 @@ class DTQN(nn.Module):
         # Norm and run through a linear layer to get to action space
         x = self.layernorm(x)
         return self.ffn(x)
+
+    def forward(
+        self, obss: torch.Tensor, bag: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        batch, history_len, obs_dim = obss.size()
+        assert (
+            history_len <= self.history_len
+        ), "Cannot forward, history is longer than expected."
+        assert (
+            obs_dim == self.obs_dim
+        ), f"Obs dim is incorrect. Expected {self.obs_dim} got {obs_dim}"
+
+        token_embeddings = self.obs_embedding(obss)
+        # batch_size x hist_len x obs_dim
+        x = token_embeddings + self.position_embedding[:, :history_len, :]
+        if bag is not None:
+            bag_embeddings = self.obs_embedding(bag)
+            x = self.dropout(
+                torch.cat(
+                    (
+                        x,
+                        bag_embeddings + self.bag_embed,
+                    ),
+                    dim=1,
+                )
+            )
+        else:
+            x = self.dropout(x)
+        # Send through transformer
+        x = self.transformer_layers(x)
+        # Norm and run through a linear layer to get to action space
+        x = self.layernorm(x)
+        return self.ffn(x)[:, :history_len, :]
