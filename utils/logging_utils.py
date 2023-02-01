@@ -123,6 +123,7 @@ def get_logger(policy_path: str, args, wandb_kwargs):
                 "obsembed",
                 "inembed",
                 "context",
+                "bag_size",
                 "heads",
                 "layers",
                 "batch",
