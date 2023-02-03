@@ -69,7 +69,7 @@ class ReplayBuffer:
         done: np.ndarray,
         episode_length: Optional[int] = 0,
     ) -> None:
-        episode_idx = self.pos[0] % self.max_size
+        episode_idx = self.pos[0]
         obs_idx = self.pos[1]
         self.obss[episode_idx, obs_idx + 1] = obs
         self.actions[episode_idx, obs_idx] = action
@@ -80,14 +80,14 @@ class ReplayBuffer:
 
     def store_obs(self, obs: np.ndarray) -> None:
         """Use this at the beginning of the episode to store the first obs"""
-        episode_idx = self.pos[0] % self.max_size
+        episode_idx = self.pos[0]
         self.obss[episode_idx, 0] = obs
 
     def can_sample(self, batch_size: int) -> bool:
         return batch_size < self.pos[0]
 
     def flush(self):
-        self.pos = [self.pos[0] + 1, 0]
+        self.pos = [(self.pos[0] + 1) % self.max_size, 0]
 
     def sample(
         self, batch_size: int

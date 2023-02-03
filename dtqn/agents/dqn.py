@@ -118,7 +118,8 @@ class DqnAgent:
 
     def context_reset(self, obs: np.ndarray) -> None:
         self.context.reset(obs)
-        self.replay_buffer.store_obs(obs)
+        if self.train_mode:
+            self.replay_buffer.store_obs(obs)
 
     def train(self) -> None:
         """Perform one gradient step of the network"""

@@ -183,7 +183,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
     total_steps = 0
 
     for _ in range(eval_episodes):
-        agent.context.reset(eval_env.reset())
+        agent.context_reset(eval_env.reset())
         done = False
         ep_reward = 0
         if render:
@@ -231,6 +231,8 @@ def train(
     verbose: bool = False,
 ):
     start_time = time()
+    # Turn on train mode
+    agent.eval_off()
     agent.context_reset(env.reset())
 
     for timestep in range(agent.num_train_steps, total_steps):
@@ -310,7 +312,7 @@ def step(agent, env, eps):
 def prepopulate(agent, prepop_steps, env: Env):
     timestep = 0
     while timestep < prepop_steps:
-        agent.context.reset(env.reset())
+        agent.context_reset(env.reset())
         done = False
         while not done:
             action = env.action_space.sample()
