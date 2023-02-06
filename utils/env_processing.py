@@ -222,7 +222,7 @@ class Context:
         """Export the context"""
         current_timestep = min(self.timestep, self.max_length) - 1
         return (
-            self.obs[current_timestep],
+            self.obs[current_timestep + 1],
             self.action[current_timestep],
             self.reward[current_timestep],
             self.done[current_timestep],

@@ -90,6 +90,13 @@ class DtqnAgent(DrqnAgent):
         # In other words, select the highest q value action
         return torch.argmax(q_values[:, -1, :]).item()
 
+    def context_reset(self, obs: np.ndarray) -> None:
+        self.context.reset(obs)
+        if self.train_mode:
+            self.replay_buffer.store_obs(obs)
+        if self.bag_size > 0:
+            self.bag.reset()
+
     def observe(
         self, obs: np.ndarray, action: int, reward: float, done: bool, bag: bool = True
     ) -> None:
@@ -133,12 +140,11 @@ class DtqnAgent(DrqnAgent):
                 self.bag.bag = possible_bags[bag_idx]
                 
         if self.train_mode:
-            o, a, r, d = self.context.export()
             self.replay_buffer.store(
-                o,
-                a,
-                r,
-                d,
+                obs,
+                action,
+                reward,
+                done,
                 min(
                     self.context_len, self.context.timestep + 1
                 ),  # TODO: Is +1 necessary?
