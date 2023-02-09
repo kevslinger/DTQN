@@ -192,12 +192,7 @@ class Context:
         self, o: np.ndarray, a: int, r: float, done: bool
     ) -> Union[np.ndarray, None]:
         """Add an entire transition. If the context is full, evict the oldest transition"""
-        # Need to roll specially because it is 1 longer
-        self.obs = (
-            np.roll(self.obs, -1, axis=0)
-            if self.timestep >= self.max_length + 1
-            else self.obs
-        )
+        self.obs = self.roll(self.obs)
         self.action = self.roll(self.action)
         self.reward = self.roll(self.reward)
         self.done = self.roll(self.done)
