@@ -19,7 +19,11 @@ class RunningAverage:
             self.sum -= self.q.popleft()
 
     def mean(self):
-        return self.sum / len(self.q)
+        try:
+            ret = self.sum / len(self.q)
+        except ZeroDivisionError:
+            ret = 0
+        return ret
 
 
 def timestamp():

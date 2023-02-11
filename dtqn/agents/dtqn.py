@@ -177,6 +177,7 @@ class DtqnAgent(DrqnAgent):
             ) = self.replay_buffer.sample(self.batch_size)
             bags = None
 
+        self.masks_trained.add(int(np.any(np.asarray(obss == self.obs_mask))))
         # Obss and Next obss: [batch-size x hist-len x obs-dim]
         obss = torch.as_tensor(obss, dtype=self.obs_tensor_type, device=self.device)
         next_obss = torch.as_tensor(

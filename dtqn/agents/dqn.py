@@ -80,6 +80,8 @@ class DqnAgent:
         self.qvalue_min = RunningAverage(100)
         self.target_min = RunningAverage(100)
 
+        self.masks_trained = RunningAverage(100)
+
         self.num_actions = num_actions
         self.train_mode = True
         self.obs_mask = obs_mask

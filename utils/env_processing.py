@@ -251,7 +251,7 @@ class Context:
 
     @property
     def is_full(self) -> bool:
-        return self.timestep > self.max_length
+        return self.timestep >= self.max_length
 
     @staticmethod
     def context_like(context):
