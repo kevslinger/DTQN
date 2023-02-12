@@ -80,8 +80,6 @@ class DqnAgent:
         self.qvalue_min = RunningAverage(100)
         self.target_min = RunningAverage(100)
 
-        self.masks_trained = RunningAverage(100)
-
         self.num_actions = num_actions
         self.train_mode = True
         self.obs_mask = obs_mask
@@ -110,7 +108,13 @@ class DqnAgent:
         if np.random.rand() < epsilon:
             return np.random.randint(self.num_actions)
         q_values = self.policy_network(
-            torch.as_tensor(self.context.obs[min(self.context.timestep, self.context_len - 1)], dtype=self.obs_tensor_type, device=self.device).unsqueeze(0).unsqueeze(0)
+            torch.as_tensor(
+                self.context.obs[min(self.context.timestep, self.context_len - 1)],
+                dtype=self.obs_tensor_type,
+                device=self.device,
+            )
+            .unsqueeze(0)
+            .unsqueeze(0)
         )
         return torch.argmax(q_values).item()
 
@@ -134,16 +138,12 @@ class DqnAgent:
         )
 
         # We pull obss/next_obss as [batch-size x 1 x obs-dim]
-        obss = torch.as_tensor(
-            obss, dtype=self.obs_tensor_type, device=self.device
-        )
+        obss = torch.as_tensor(obss, dtype=self.obs_tensor_type, device=self.device)
         next_obss = torch.as_tensor(
             next_obss, dtype=self.obs_tensor_type, device=self.device
         )
         # Actions is [batch-size x 1 x 1] which we want to be [batch-size x 1]
-        actions = torch.as_tensor(
-            actions, dtype=torch.long, device=self.device
-        )
+        actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
         # Rewards/Dones are [batch-size x 1 x 1] which we want to be [batch-size]
         rewards = torch.as_tensor(
             rewards, dtype=torch.float32, device=self.device

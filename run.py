@@ -257,7 +257,6 @@ def train(
                     "losses/Max_Target_Value": agent.target_max.mean(),
                     "losses/Mean_Target_Value": agent.target_mean.mean(),
                     "losses/Min_Target_Value": agent.target_min.mean(),
-                    "losses/Masks_Trained": agent.masks_trained.mean(),
                     "results/Return": ret,
                     "results/Mean_Return": mean_reward.mean(),
                     "results/Success_Rate": sr,
@@ -414,6 +413,7 @@ def run_experiment(args):
     time_remaining = (
         args.time_limit * 3600 - (time() - start_time) if args.time_limit else None
     )
+
     train(
         agent,
         env,

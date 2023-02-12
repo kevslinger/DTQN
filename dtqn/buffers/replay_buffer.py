@@ -32,7 +32,7 @@ class ReplayBuffer:
             self.obss = np.zeros(
                 [
                     self.max_size,
-                    max_episode_steps + 1,
+                    max_episode_steps + 1, # Keeps first and last obs together for +1
                     *env_obs_length,
                 ],
                 dtype=np.uint8,
@@ -41,22 +41,22 @@ class ReplayBuffer:
             self.obss = np.zeros(
                 [
                     self.max_size,
-                    max_episode_steps + 1,
+                    max_episode_steps + 1, # Keeps first and last obs together for +1
                     env_obs_length,
                 ],
                 dtype=np.float32,
             )
 
         self.actions = np.zeros(
-            [self.max_size, max_episode_steps + 1, 1],
+            [self.max_size, max_episode_steps, 1],
             dtype=np.uint8,
         )
         self.rewards = np.zeros(
-            [self.max_size, max_episode_steps + 1, 1],
+            [self.max_size, max_episode_steps, 1],
             dtype=np.float32,
         )
         self.dones = np.zeros(
-            [self.max_size, max_episode_steps + 1, 1],
+            [self.max_size, max_episode_steps, 1],
             dtype=np.bool_,
         )
         self.episode_lengths = np.zeros([self.max_size], dtype=np.uint8)
@@ -69,7 +69,7 @@ class ReplayBuffer:
         done: np.ndarray,
         episode_length: Optional[int] = 0,
     ) -> None:
-        episode_idx = self.pos[0]
+        episode_idx = self.pos[0] % self.max_size
         obs_idx = self.pos[1]
         self.obss[episode_idx, obs_idx + 1] = obs
         self.actions[episode_idx, obs_idx] = action
@@ -80,21 +80,22 @@ class ReplayBuffer:
 
     def store_obs(self, obs: np.ndarray) -> None:
         """Use this at the beginning of the episode to store the first obs"""
-        episode_idx = self.pos[0]
+        episode_idx = self.pos[0] % self.max_size
         self.obss[episode_idx, 0] = obs
 
     def can_sample(self, batch_size: int) -> bool:
         return batch_size < self.pos[0]
 
     def flush(self):
-        self.pos = [(self.pos[0] + 1) % self.max_size, 0]
+        self.pos = [(self.pos[0] + 1), 0]
 
     def sample(
         self, batch_size: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         episode_idxes = np.array(
             [
-                [random.randint(0, min(self.pos[0], self.max_size) - 1)]
+                # Exclude the current episode we're in
+                [random.choice([i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0]])]
                 for _ in range(batch_size)
             ]
         )

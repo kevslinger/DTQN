@@ -96,7 +96,9 @@ class DrqnAgent(DqnAgent):
                 self.context.obs[min(self.context.timestep, self.context_len - 1)],
                 dtype=self.obs_tensor_type,
                 device=self.device,
-            ).unsqueeze(0).unsqueeze(0),
+            )
+            .unsqueeze(0)
+            .unsqueeze(0),
             hidden_states=self.context.hidden,
         )
         if np.random.rand() < epsilon:
