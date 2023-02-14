@@ -309,15 +309,22 @@ def step(agent, env, eps):
         agent.context_reset(env.reset())
 
 
-def prepopulate(agent, prepop_steps, env: Env):
+def prepopulate(agent, prepop_steps: int, env: Env):
     timestep = 0
     while timestep < prepop_steps:
         agent.context_reset(env.reset())
         done = False
         while not done:
             action = env.action_space.sample()
-            next_obs, reward, done, _ = env.step(action)
-            agent.observe(next_obs, action, reward, done, bag=False)
+            next_obs, reward, done, info = env.step(action)
+
+            # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
+            if info.get("TimeLimit.truncated", False):
+                buffer_done = False
+            else:
+                buffer_done = done
+
+            agent.observe(next_obs, action, reward, buffer_done, bag=False)
             timestep += 1
         agent.replay_buffer.flush()
 

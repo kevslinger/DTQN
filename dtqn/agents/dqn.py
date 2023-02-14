@@ -59,6 +59,7 @@ class DqnAgent:
         self.replay_buffer = ReplayBuffer(
             buffer_size,
             env_obs_length=env_obs_length,
+            obs_mask=obs_mask,
             max_episode_steps=max_env_steps,
             context_len=context_len,
         )

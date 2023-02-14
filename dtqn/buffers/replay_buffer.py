@@ -20,30 +20,34 @@ class ReplayBuffer:
         self,
         buffer_size: int,
         env_obs_length: Union[int, Tuple],
+        obs_mask: int,
         max_episode_steps: int,
         context_len: Optional[int] = 1,
     ):
-        self.max_size = buffer_size // max_episode_steps
+        # self.max_size = buffer_size // max_episode_steps
+        self.max_size = buffer_size
         self.context_len = context_len
         self.pos = [0, 0]
 
         # Image domains
         if isinstance(env_obs_length, tuple):
-            self.obss = np.zeros(
+            self.obss = np.full(
                 [
                     self.max_size,
                     max_episode_steps + 1, # Keeps first and last obs together for +1
                     *env_obs_length,
                 ],
+                obs_mask,
                 dtype=np.uint8,
             )
         else:
-            self.obss = np.zeros(
+            self.obss = np.full(
                 [
                     self.max_size,
                     max_episode_steps + 1, # Keeps first and last obs together for +1
                     env_obs_length,
                 ],
+                obs_mask,
                 dtype=np.float32,
             )
 
@@ -55,7 +59,7 @@ class ReplayBuffer:
             [self.max_size, max_episode_steps, 1],
             dtype=np.float32,
         )
-        self.dones = np.zeros(
+        self.dones = np.ones(
             [self.max_size, max_episode_steps, 1],
             dtype=np.bool_,
         )
@@ -92,10 +96,11 @@ class ReplayBuffer:
     def sample(
         self, batch_size: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        # Exclude the current episode we're in
+        valid_episodes = [i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0] % self.max_size]
         episode_idxes = np.array(
             [
-                # Exclude the current episode we're in
-                [random.choice([i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0]])]
+                [random.choice(valid_episodes)]
                 for _ in range(batch_size)
             ]
         )
@@ -133,7 +138,8 @@ class ReplayBuffer:
     ]:
         episode_idxes = np.array(
             [
-                [random.randint(0, min(self.pos[0], self.max_size) - 1)]
+                # Exclude the current episode we're in
+                [random.choice([i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0]])]
                 for _ in range(batch_size)
             ]
         )

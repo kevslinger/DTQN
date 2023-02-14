@@ -165,13 +165,13 @@ class Context:
         # Account for images
         if isinstance(self.env_obs_length, tuple):
             self.obs = np.full(
-                [self.max_length + 1, *self.env_obs_length],
+                [self.max_length, *self.env_obs_length],
                 self.obs_mask,
                 dtype=np.uint8,
             )
         else:
             self.obs = np.full(
-                [self.max_length + 1, self.env_obs_length], self.obs_mask
+                [self.max_length, self.env_obs_length], self.obs_mask
             )
         # Initial observation
         self.obs[0] = obs
@@ -201,10 +201,10 @@ class Context:
 
         # If we are going to evict an observation, we need to return it for possibly adding to the bag
         evicted_obs = None
-        if np.any(np.asarray(self.obs[t + 1] != self.obs_mask)):
-            evicted_obs = self.obs[t + 1].copy()
+        if self.is_full:
+            evicted_obs = self.obs[t].copy()
 
-        self.obs[t + 1] = o
+        self.obs[min(t + 1, self.max_length - 1)] = o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
@@ -223,12 +223,6 @@ class Context:
             self.done[current_timestep],
         )
 
-    def hist_with_obs(self, obs: np.ndarray) -> np.ndarray:
-        """Return an observation appended to the observation history, but do not commit it"""
-        hist = self.roll(self.obs).copy()
-        hist[min(self.timestep, self.max_length - 1)] = obs
-        return hist
-
     def roll(self, arr: np.ndarray) -> np.ndarray:
         """Utility function to help with insertions at the end of the array. If the context is full, we replace the first element with the new element, then 'roll' the new element to the end of the array"""
         return np.roll(arr, -1, axis=0) if self.timestep >= self.max_length else arr
@@ -236,18 +230,6 @@ class Context:
     def update_hidden(self, hidden):
         """Replace the hidden state (for use with RNNs)"""
         self.hidden = hidden
-
-    @property
-    def last_action(self) -> int:
-        """Get the last action taken"""
-        return self.action[-1][0]
-
-    @property
-    def obs_history(self) -> np.ndarray:
-        """Get the agent's observation history.
-
-        NOTE: We typically use this once we've seen an observation but before completing a context. That's why we're using `self.timestep+1`"""
-        return self.obs[: self.timestep + 1]
 
     @property
     def is_full(self) -> bool:

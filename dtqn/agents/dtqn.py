@@ -65,18 +65,13 @@ class DtqnAgent(DrqnAgent):
             return np.random.randint(self.num_actions)
         # the policy network gets [1, timestep+1 x obs length] as input and
         # outputs [1, timestep+1 x 4 outputs]
-        if self.context.is_full:
-            context_tensor = torch.as_tensor(
-                self.context.obs[1:], dtype=self.obs_tensor_type, device=self.device
-            ).unsqueeze(0)
-        else:
-            context_tensor = torch.as_tensor(
-                self.context.obs[
-                    : min(self.context.max_length, self.context.timestep + 1)
-                ],
-                dtype=self.obs_tensor_type,
-                device=self.device,
-            ).unsqueeze(0)
+        context_tensor = torch.as_tensor(
+            self.context.obs[
+                : min(self.context.max_length, self.context.timestep + 1)
+            ],
+            dtype=self.obs_tensor_type,
+            device=self.device,
+        ).unsqueeze(0)
 
         q_values = self.policy_network(
             context_tensor,
