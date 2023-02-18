@@ -147,9 +147,7 @@ class DtqnAgent(DrqnAgent):
                 action,
                 reward,
                 done,
-                min(
-                    self.context_len, self.context.timestep + 1
-                ),  # TODO: Is +1 necessary?
+                self.context.timestep + 1
             )
 
     def train(self) -> None:

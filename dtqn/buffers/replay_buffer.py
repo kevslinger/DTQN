@@ -24,6 +24,7 @@ class ReplayBuffer:
         max_episode_steps: int,
         context_len: Optional[int] = 1,
     ):
+        # TODO: For images, we may need to shrink the size
         # self.max_size = buffer_size // max_episode_steps
         self.max_size = buffer_size
         self.context_len = context_len
@@ -91,7 +92,7 @@ class ReplayBuffer:
         return batch_size < self.pos[0]
 
     def flush(self):
-        self.pos = [(self.pos[0] + 1), 0]
+        self.pos = [self.pos[0] + 1, 0]
 
     def sample(
         self, batch_size: int

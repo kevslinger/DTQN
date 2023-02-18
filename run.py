@@ -1,6 +1,6 @@
 import os
 import argparse
-from time import time
+from time import time, sleep
 from typing import Optional
 
 import torch
@@ -188,7 +188,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
         ep_reward = 0
         if render:
             eval_env.render()
-            time.sleep(0.5)
+            sleep(0.5)
         while not done:
             action = agent.get_action(epsilon=0.0)
             obs_next, reward, done, info = eval_env.step(action)
@@ -198,7 +198,7 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
                 eval_env.render()
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
-                time.sleep(0.5)
+                sleep(0.5)
         total_reward += ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
@@ -373,7 +373,7 @@ def run_experiment(args):
     policy_path = os.path.join(
         policy_save_dir,
         f"model={args.model}_env={args.env}_obsembed={args.obsembed}_inembed={args.inembed}_context={args.context}_heads={args.heads}_layers={args.layers}_"
-        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_seed={args.seed}",
+        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
     )
 
     # Enjoy mode
