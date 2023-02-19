@@ -173,11 +173,10 @@ class ReplayBuffer:
             else:
                 bags[bag_idx] = np.array(
                     random.sample(
-                        self.obss[episode_idxes[bag_idx], : transition_starts[bag_idx]],
+                        self.obss[episode_idxes[bag_idx], : transition_starts[bag_idx]].squeeze().tolist(),
                         k=sample_bag.bag_size,
                     )
                 )
-
         return (
             self.obss[episode_idxes, transitions],
             self.actions[episode_idxes, transitions],

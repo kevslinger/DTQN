@@ -147,7 +147,7 @@ class DtqnAgent(DrqnAgent):
                 action,
                 reward,
                 done,
-                self.context.timestep + 1
+                self.context.timestep
             )
 
     def train(self) -> None:
