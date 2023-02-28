@@ -28,6 +28,9 @@ class ReplayBuffer:
         # self.max_size = buffer_size // max_episode_steps
         self.max_size = buffer_size
         self.context_len = context_len
+        self.env_obs_length = env_obs_length
+        self.max_episode_steps = max_episode_steps
+        self.obs_mask = obs_mask
         self.pos = [0, 0]
 
         # Image domains
@@ -86,6 +89,7 @@ class ReplayBuffer:
     def store_obs(self, obs: np.ndarray) -> None:
         """Use this at the beginning of the episode to store the first obs"""
         episode_idx = self.pos[0] % self.max_size
+        self.cleanse_episode(episode_idx)
         self.obss[episode_idx, 0] = obs
 
     def can_sample(self, batch_size: int) -> bool:
@@ -93,6 +97,41 @@ class ReplayBuffer:
 
     def flush(self):
         self.pos = [self.pos[0] + 1, 0]
+
+    def cleanse_episode(self, episode_idx: int) -> None:
+        # Cleanse the episode of any previous data
+        # Image domains
+        if isinstance(self.env_obs_length, tuple):
+            self.obss[episode_idx] = np.full(
+                [
+                    self.max_episode_steps + 1, # Keeps first and last obs together for +1
+                    *self.env_obs_length,
+                ],
+                self.obs_mask,
+                dtype=np.uint8,
+            )
+        else:
+            self.obss[episode_idx] = np.full(
+                [
+                    self.max_episode_steps + 1, # Keeps first and last obs together for +1
+                    self.env_obs_length,
+                ],
+                self.obs_mask,
+                dtype=np.float32,
+            )
+        self.actions[episode_idx] = np.zeros(
+            [self.max_episode_steps, 1],
+            dtype=np.uint8,
+        )
+        self.rewards[episode_idx] = np.zeros(
+            [self.max_episode_steps, 1],
+            dtype=np.float32,
+        )
+        self.dones[episode_idx] = np.ones(
+            [self.max_episode_steps, 1],
+            dtype=np.bool_,
+        )
+        self.episode_lengths[episode_idx] = 0
 
     def sample(
         self, batch_size: int

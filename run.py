@@ -206,10 +206,12 @@ def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = 
 
     # Set networks back to train mode
     agent.eval_off()
+    # Prevent divide by 0
+    episodes = max(eval_episodes, 1)
     return (
-        num_successes / eval_episodes,
-        total_reward / eval_episodes,
-        total_steps / eval_episodes,
+        num_successes / episodes,
+        total_reward / episodes,
+        total_steps / episodes,
     )
 
 
