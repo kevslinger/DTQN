@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from dtqn.agents.drqn import DrqnAgent
 from utils.env_processing import Bag
+from utils.random import RNG
 
 
 class DtqnAgent(DrqnAgent):
@@ -61,14 +62,12 @@ class DtqnAgent(DrqnAgent):
 
     @torch.no_grad()
     def get_action(self, epsilon: float = 0.0) -> int:
-        if np.random.rand() < epsilon:
-            return np.random.randint(self.num_actions)
+        if RNG.rng.random() < epsilon:
+            return RNG.rng.integers(self.num_actions)
         # the policy network gets [1, timestep+1 x obs length] as input and
         # outputs [1, timestep+1 x 4 outputs]
         context_tensor = torch.as_tensor(
-            self.context.obs[
-                : min(self.context.max_length, self.context.timestep + 1)
-            ],
+            self.context.obs[: min(self.context.max_length, self.context.timestep + 1)],
             dtype=self.obs_tensor_type,
             device=self.device,
         ).unsqueeze(0)
@@ -142,13 +141,7 @@ class DtqnAgent(DrqnAgent):
                 self.bag.bag = possible_bags[bag_idx]
 
         if self.train_mode:
-            self.replay_buffer.store(
-                obs,
-                action,
-                reward,
-                done,
-                self.context.timestep
-            )
+            self.replay_buffer.store(obs, action, reward, done, self.context.timestep)
 
     def train(self) -> None:
         if not self.replay_buffer.can_sample(self.batch_size):

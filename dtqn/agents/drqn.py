@@ -7,6 +7,7 @@ import numpy as np
 
 from dtqn.agents.dqn import DqnAgent
 from utils.env_processing import Context
+from utils.random import RNG
 
 
 class DrqnAgent(DqnAgent):
@@ -101,8 +102,8 @@ class DrqnAgent(DqnAgent):
             .unsqueeze(0),
             hidden_states=self.context.hidden,
         )
-        if np.random.rand() < epsilon:
-            return np.random.randint(self.num_actions)
+        if RNG.rng.random() < epsilon:
+            return RNG.rng.integers(self.num_actions)
         else:
             return torch.argmax(q_values).item()
 

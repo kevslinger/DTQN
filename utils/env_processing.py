@@ -1,5 +1,3 @@
-from collections import deque
-
 import gym
 from gym import spaces
 from gym.wrappers.time_limit import TimeLimit
@@ -26,6 +24,8 @@ import os
 from enum import Enum
 from typing import Tuple
 
+from utils.random import RNG
+
 
 def make_env(id_or_path: str) -> GymEnvironment:
     """Makes a GV gym environment."""
@@ -51,7 +51,7 @@ def make_env(id_or_path: str) -> GymEnvironment:
             observation_representation=observation_representation,
         )
         env = GymEnvironment(outer_env)
-        env = TimeLimit(GridVerseWrapper(env), max_episode_steps=500)
+        env = TimeLimit(GridVerseWrapper(env), max_episode_steps=250)
 
     return env
 
@@ -170,21 +170,13 @@ class Context:
                 dtype=np.uint8,
             )
         else:
-            self.obs = np.full(
-                [self.max_length, self.env_obs_length], self.obs_mask
-            )
+            self.obs = np.full([self.max_length, self.env_obs_length], self.obs_mask)
         # Initial observation
         self.obs[0] = obs
 
-        self.action = np.array(
-            [np.array([np.random.randint(self.num_actions)])] * self.max_length,
-        )
-        self.reward = np.array(
-            [np.array([self.reward_mask])] * self.max_length,
-        )
-        self.done = np.array(
-            [np.array([self.done_mask])] * self.max_length,
-        )
+        self.action = RNG.rng.integers(self.num_actions, size=(self.max_length, 1))
+        self.reward = np.full_like(self.action, self.reward_mask)
+        self.done = np.full_like(self.reward, self.done_mask, dtype=np.int32)
         self.hidden = self.init_hidden
         self.timestep = 0
 

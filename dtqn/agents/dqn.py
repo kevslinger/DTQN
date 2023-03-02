@@ -12,6 +12,7 @@ from dtqn.buffers.replay_buffer import ReplayBuffer
 from utils.logging_utils import RunningAverage
 from utils.env_processing import Context
 from utils.epsilon_anneal import LinearAnneal
+from utils.random import RNG
 
 
 class DqnAgent:
@@ -106,8 +107,8 @@ class DqnAgent:
     @torch.no_grad()
     def get_action(self, epsilon=0.0) -> int:
         """Use policy_network to get an e-greedy action given the current obs."""
-        if np.random.rand() < epsilon:
-            return np.random.randint(self.num_actions)
+        if RNG.rng.random() < epsilon:
+            return RNG.rng.integers(self.num_actions)
         q_values = self.policy_network(
             torch.as_tensor(
                 self.context.obs[min(self.context.timestep, self.context_len - 1)],
@@ -224,8 +225,8 @@ class DqnAgent:
             {
                 "step": self.num_train_steps,
                 "wandb_id": wandb_id,
-                # Replay Buffer
-                "replay_buffer_pos": self.replay_buffer.pos,
+                # Replay Buffer: Don't keep the observation index saved
+                "replay_buffer_pos": [self.replay_buffer.pos[0], 0],
                 # Neural Net
                 "policy_net_state_dict": self.policy_network.state_dict(),
                 "target_net_state_dict": self.target_network.state_dict(),
@@ -246,6 +247,7 @@ class DqnAgent:
                 "target_min": self.target_min,
                 # RNG states
                 "random_rng_state": random.getstate(),
+                "rng_bit_generator_state": RNG.rng.bit_generator.state,
                 "numpy_rng_state": np.random.get_state(),
                 "torch_rng_state": torch.get_rng_state(),
                 "torch_cuda_rng_state": torch.cuda.get_rng_state()
@@ -293,6 +295,7 @@ class DqnAgent:
         self.target_min = checkpoint["target_min"]
         # RNG states
         random.setstate(checkpoint["random_rng_state"])
+        RNG.rng.bit_generator.state = checkpoint["rng_bit_generator_state"]
         np.random.set_state(checkpoint["numpy_rng_state"])
         torch.set_rng_state(checkpoint["torch_rng_state"])
         if torch.cuda.is_available():

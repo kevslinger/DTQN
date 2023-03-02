@@ -6,6 +6,10 @@ import gym
 from typing import Optional
 
 
+class RNG:
+    rng: np.random.Generator = None
+
+
 def set_global_seed(
     seed: int, env: gym.Env, eval_env: Optional[gym.Env] = None
 ) -> None:
@@ -26,3 +30,4 @@ def set_global_seed(
     if eval_env is not None:
         eval_env.seed(seed=seed)
     os.environ["PYTHONHASHSEED"] = str(ospyseed)
+    RNG.rng = np.random.Generator(np.random.PCG64(seed=seed))

@@ -24,9 +24,7 @@ class ReplayBuffer:
         max_episode_steps: int,
         context_len: Optional[int] = 1,
     ):
-        # TODO: For images, we may need to shrink the size
-        # self.max_size = buffer_size // max_episode_steps
-        self.max_size = buffer_size
+        self.max_size = buffer_size // max_episode_steps
         self.context_len = context_len
         self.env_obs_length = env_obs_length
         self.max_episode_steps = max_episode_steps
@@ -38,7 +36,7 @@ class ReplayBuffer:
             self.obss = np.full(
                 [
                     self.max_size,
-                    max_episode_steps + 1, # Keeps first and last obs together for +1
+                    max_episode_steps + 1,  # Keeps first and last obs together for +1
                     *env_obs_length,
                 ],
                 obs_mask,
@@ -48,7 +46,7 @@ class ReplayBuffer:
             self.obss = np.full(
                 [
                     self.max_size,
-                    max_episode_steps + 1, # Keeps first and last obs together for +1
+                    max_episode_steps + 1,  # Keeps first and last obs together for +1
                     env_obs_length,
                 ],
                 obs_mask,
@@ -104,7 +102,8 @@ class ReplayBuffer:
         if isinstance(self.env_obs_length, tuple):
             self.obss[episode_idx] = np.full(
                 [
-                    self.max_episode_steps + 1, # Keeps first and last obs together for +1
+                    self.max_episode_steps
+                    + 1,  # Keeps first and last obs together for +1
                     *self.env_obs_length,
                 ],
                 self.obs_mask,
@@ -113,7 +112,8 @@ class ReplayBuffer:
         else:
             self.obss[episode_idx] = np.full(
                 [
-                    self.max_episode_steps + 1, # Keeps first and last obs together for +1
+                    self.max_episode_steps
+                    + 1,  # Keeps first and last obs together for +1
                     self.env_obs_length,
                 ],
                 self.obs_mask,
@@ -137,12 +137,13 @@ class ReplayBuffer:
         self, batch_size: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         # Exclude the current episode we're in
-        valid_episodes = [i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0] % self.max_size]
+        valid_episodes = [
+            i
+            for i in range(min(self.pos[0], self.max_size))
+            if i != self.pos[0] % self.max_size
+        ]
         episode_idxes = np.array(
-            [
-                [random.choice(valid_episodes)]
-                for _ in range(batch_size)
-            ]
+            [[random.choice(valid_episodes)] for _ in range(batch_size)]
         )
         transition_starts = np.array(
             [
@@ -179,7 +180,15 @@ class ReplayBuffer:
         episode_idxes = np.array(
             [
                 # Exclude the current episode we're in
-                [random.choice([i for i in range(min(self.pos[0], self.max_size)) if i != self.pos[0]])]
+                [
+                    random.choice(
+                        [
+                            i
+                            for i in range(min(self.pos[0], self.max_size))
+                            if i != self.pos[0]
+                        ]
+                    )
+                ]
                 for _ in range(batch_size)
             ]
         )
@@ -212,7 +221,9 @@ class ReplayBuffer:
             else:
                 bags[bag_idx] = np.array(
                     random.sample(
-                        self.obss[episode_idxes[bag_idx], : transition_starts[bag_idx]].squeeze().tolist(),
+                        self.obss[episode_idxes[bag_idx], : transition_starts[bag_idx]]
+                        .squeeze()
+                        .tolist(),
                         k=sample_bag.bag_size,
                     )
                 )
