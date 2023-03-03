@@ -271,9 +271,11 @@ class Bag:
             return False
 
     def make_empty_bag(self) -> np.ndarray:
-        return np.array(
-            [np.array([self.obs_mask] * self.obs_length)] * self.bag_size,
-        )
+        # Image
+        if isinstance(self.obs_length, tuple):
+            return np.full((self.bag_size, *self.obs_length), self.obs_mask)
+        else:
+            return np.full((self.bag_size, self.obs_length), self.obs_mask)
 
     @property
     def is_full(self) -> bool:

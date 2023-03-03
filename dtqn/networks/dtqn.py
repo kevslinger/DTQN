@@ -181,7 +181,9 @@ class DTQN(nn.Module):
     def forward(
         self, obss: torch.Tensor, bag: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        batch, history_len, obs_dim = obss.size()
+        history_len = obss.size(1)
+        # If the observations are images, obs_dim is the dimensions of the image
+        obs_dim = obss.size()[2:] if len(obss.size()) > 3 else obss.size(2)
         assert (
             history_len <= self.history_len
         ), "Cannot forward, history is longer than expected."
