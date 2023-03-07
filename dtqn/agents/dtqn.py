@@ -100,9 +100,9 @@ class DtqnAgent(DrqnAgent):
         If we're in train mode, then we also add the transition to our replay buffer."""
         evicted_obs = self.context.add_transition(obs, action, reward, done)
         # If there is an evicted obs, we need to decide if it should go in the bag or not
-        if bag and self.bag_size > 0 and evicted_obs is not None:
+        if self.bag_size > 0 and evicted_obs is not None:
             # Bag is already full
-            if not self.bag.add(obs):
+            if not self.bag.add(evicted_obs):
                 # For each possible bag, get the Q-values
                 possible_bags = np.tile(self.bag.bag, (self.bag_size + 1, 1, 1))
                 for i in range(self.bag_size):

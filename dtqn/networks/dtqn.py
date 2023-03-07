@@ -199,8 +199,8 @@ class DTQN(nn.Module):
             x = self.dropout(
                 torch.cat(
                     (
-                        x,
                         bag_embeddings + self.bag_embed,
+                        x,
                     ),
                     dim=1,
                 )
@@ -211,4 +211,4 @@ class DTQN(nn.Module):
         x = self.transformer_layers(x)
         # Norm and run through a linear layer to get to action space
         x = self.layernorm(x)
-        return self.ffn(x)[:, :history_len, :]
+        return self.ffn(x)[:, -history_len:, :]

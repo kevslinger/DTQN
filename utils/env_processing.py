@@ -262,7 +262,7 @@ class Bag:
         self.bag = self.make_empty_bag()
 
     def add(self, obs) -> bool:
-        if self.pos < self.bag_size:
+        if not self.is_full:
             self.bag[self.pos] = obs
             self.pos += 1
             return True
@@ -279,4 +279,4 @@ class Bag:
 
     @property
     def is_full(self) -> bool:
-        return self.pos < self.bag_size
+        return self.pos >= self.bag_size
