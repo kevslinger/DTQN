@@ -249,7 +249,7 @@ class Bag:
     """
 
     def __init__(self, bag_size: int, obs_mask: Union[int, float], obs_length: int):
-        self.bag_size = bag_size
+        self.size = bag_size
         self.obs_mask = obs_mask
         self.obs_length = obs_length
         # Current position in bag
@@ -273,10 +273,10 @@ class Bag:
     def make_empty_bag(self) -> np.ndarray:
         # Image
         if isinstance(self.obs_length, tuple):
-            return np.full((self.bag_size, *self.obs_length), self.obs_mask)
+            return np.full((self.size, *self.obs_length), self.obs_mask)
         else:
-            return np.full((self.bag_size, self.obs_length), self.obs_mask)
+            return np.full((self.size, self.obs_length), self.obs_mask)
 
     @property
     def is_full(self) -> bool:
-        return self.pos >= self.bag_size
+        return self.pos >= self.size

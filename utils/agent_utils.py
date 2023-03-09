@@ -40,6 +40,7 @@ def get_agent(
     learning_rate: float,
     batch_size: int,
     context_len: int,
+    eval_context_len: int,
     max_env_steps: int,
     history: bool,
     target_update_frequency: int,
@@ -51,6 +52,7 @@ def get_agent(
     gate: str = "res",
     pos: int = 1,
     bag_size: int = 0,
+    eval_bag_size: int = 0,
 ):
     env_obs_length = env_processing.get_env_obs_length(env)
     env_obs_mask = env_processing.get_env_obs_mask(env)
@@ -116,8 +118,10 @@ def get_agent(
         batch_size=batch_size,
         gamma=gamma,
         context_len=context_len,
+        eval_context_len=eval_context_len,
         embed_size=inner_embed,
         history=history,
         target_update_frequency=target_update_frequency,
         bag_size=bag_size,
+        eval_bag_size=eval_bag_size,
     )

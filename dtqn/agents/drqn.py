@@ -3,9 +3,8 @@ from typing import Callable, Union
 import torch
 from torch.nn import Module
 import torch.nn.functional as F
-import numpy as np
 
-from dtqn.agents.dqn import DqnAgent
+from dtqn.agents.dqn import DqnAgent, TrainMode
 from utils.env_processing import Context
 from utils.random import RNG
 
@@ -25,6 +24,7 @@ class DrqnAgent(DqnAgent):
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 50,
+        eval_context_len: int = 50,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
@@ -44,6 +44,7 @@ class DrqnAgent(DqnAgent):
             learning_rate,
             batch_size,
             context_len,
+            eval_context_len,
             gamma,
             grad_norm_clip,
             target_update_frequency,
@@ -75,10 +76,13 @@ class DrqnAgent(DqnAgent):
             env_obs_length,
             init_hidden=hidden_states,
         )
+        self.asym_eval_context = Context(
+            eval_context_len, obs_mask, self.num_actions, env_obs_length
+        )
 
     def observe(self, obs, action, reward, done) -> None:
         self.context.add_transition(obs, action, reward, done)
-        if self.train_mode:
+        if self.train_mode == TrainMode.TRAIN:
             o, a, r, d = self.context.export()
             self.replay_buffer.store(
                 o,

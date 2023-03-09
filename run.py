@@ -162,6 +162,23 @@ def get_args():
     parser.add_argument(
         "--bag-size", type=int, default=0, help="The size of the persistent memory bag."
     )
+    parser.add_argument(
+        "--asymmetric",
+        action="store_true",
+        help="Whether or not to perform asymmetric evaluations",
+    )
+    parser.add_argument(
+        "--eval-bag-size",
+        type=int,
+        default=4,
+        help="If using asymmetric learning, this will be the size of the evaluation bag.",
+    )
+    parser.add_argument(
+        "--eval-context",
+        type=int,
+        default=10,
+        help="If using asymmetric learning, this will be the size of the evaluation context.",
+    )
     # For slurm
     parser.add_argument(
         "--slurm-job-id",
@@ -173,10 +190,19 @@ def get_args():
     return parser.parse_args()
 
 
-def evaluate(agent, eval_env: Env, eval_episodes: int, render: Optional[bool] = None):
+def evaluate(
+    agent,
+    eval_env: Env,
+    eval_episodes: int,
+    asymmetric: bool = False,
+    render: Optional[bool] = None,
+):
     """Evaluate the network for n_episodes"""
     # Set networks to eval mode (turns off dropout, etc.)
-    agent.eval_on()
+    if asymmetric:
+        agent.eval_on_asym()
+    else:
+        agent.eval_on()
 
     total_reward = 0
     num_successes = 0
@@ -226,10 +252,14 @@ def train(
     policy_path: str,
     save_policy: bool,
     logger,
-    mean_reward: RunningAverage,
     mean_success_rate: RunningAverage,
     mean_episode_length: RunningAverage,
+    mean_reward: RunningAverage,
+    asym_success_rate: RunningAverage,
+    asym_reward: RunningAverage,
+    asym_episode_length: RunningAverage,
     time_remaining: Optional[int],
+    asymmetric: bool,
     verbose: bool = False,
 ):
     start_time = time()
@@ -245,28 +275,46 @@ def train(
 
         if timestep % eval_frequency == 0:
             sr, ret, length = evaluate(agent, eval_env, eval_episodes)
+
+            hours = (time() - start_time) / 3600
             mean_success_rate.add(sr)
             mean_reward.add(ret)
             mean_episode_length.add(length)
+            log_vals = {
+                "losses/TD_Error": agent.td_errors.mean(),
+                "losses/Grad_Norm": agent.grad_norms.mean(),
+                "losses/Max_Q_Value": agent.qvalue_max.mean(),
+                "losses/Mean_Q_Value": agent.qvalue_mean.mean(),
+                "losses/Min_Q_Value": agent.qvalue_min.mean(),
+                "losses/Max_Target_Value": agent.target_max.mean(),
+                "losses/Mean_Target_Value": agent.target_mean.mean(),
+                "losses/Min_Target_Value": agent.target_min.mean(),
+                "results/Success_Rate": sr,
+                "results/Mean_Success_Rate": mean_success_rate.mean(),
+                "results/Return": ret,
+                "results/Mean_Return": mean_reward.mean(),
+                "results/Episode_Length": length,
+                "results/Mean_Episode_Length": mean_episode_length.mean(),
+                "results/Hours": hours,
+            }
+            if asymmetric:
+                asym_sr, asym_ret, asym_length = evaluate(
+                    agent, eval_env, eval_episodes, asymmetric=True
+                )
+                asym_success_rate.add(asym_sr)
+                asym_reward.add(asym_ret)
+                asym_episode_length.add(asym_length)
+
+                log_vals.update(
+                    {
+                        "results/Asym_Success_Rate": asym_success_rate.mean(),
+                        "results/Asym_Return": asym_reward.mean(),
+                        "results/Asym_Episode_Length": asym_episode_length.mean(),
+                    }
+                )
 
             logger.log(
-                {
-                    "losses/TD_Error": agent.td_errors.mean(),
-                    "losses/Grad_Norm": agent.grad_norms.mean(),
-                    "losses/Max_Q_Value": agent.qvalue_max.mean(),
-                    "losses/Mean_Q_Value": agent.qvalue_mean.mean(),
-                    "losses/Min_Q_Value": agent.qvalue_min.mean(),
-                    "losses/Max_Target_Value": agent.target_max.mean(),
-                    "losses/Mean_Target_Value": agent.target_mean.mean(),
-                    "losses/Min_Target_Value": agent.target_min.mean(),
-                    "results/Return": ret,
-                    "results/Mean_Return": mean_reward.mean(),
-                    "results/Success_Rate": sr,
-                    "results/Mean_Success_Rate": mean_success_rate.mean(),
-                    "results/Episode_Length": length,
-                    "results/Mean_Episode_Length": mean_episode_length.mean(),
-                    "results/Hours": (time() - start_time) / 3600,
-                },
+                log_vals,
                 step=timestep,
             )
 
@@ -286,9 +334,12 @@ def train(
             agent.save_checkpoint(
                 policy_path,
                 wandb.run.id if logger == wandb else None,
-                mean_reward,
                 mean_success_rate,
+                mean_reward,
                 mean_episode_length,
+                asym_success_rate,
+                asym_reward,
+                asym_episode_length,
                 eps,
             )
             return
@@ -326,7 +377,7 @@ def prepopulate(agent, prepop_steps: int, env: Env):
             else:
                 buffer_done = done
 
-            agent.observe(next_obs, action, reward, buffer_done, bag=False)
+            agent.observe(next_obs, action, reward, buffer_done)
             timestep += 1
         agent.replay_buffer.flush()
 
@@ -351,6 +402,7 @@ def run_experiment(args):
         args.lr,
         args.batch,
         args.context,
+        args.eval_context,
         args.max_episode_steps,
         args.history,
         args.tuf,
@@ -363,6 +415,7 @@ def run_experiment(args):
         args.gate,
         args.pos,
         args.bag_size,
+        args.eval_bag_size,
     )
 
     print(
@@ -400,9 +453,12 @@ def run_experiment(args):
         else:
             (
                 wandb_id,
-                mean_reward,
                 mean_success_rate,
+                mean_reward,
                 mean_episode_length,
+                asym_success_rate,
+                asym_reward,
+                asym_episode_length,
                 eps_val,
             ) = agent.load_checkpoint(policy_path)
             eps.val = eps_val
@@ -412,9 +468,12 @@ def run_experiment(args):
         wandb_kwargs = {"resume": None}
         # Prepopulate the replay buffer
         prepopulate(agent, 50_000, env)
-        mean_reward = RunningAverage(10)
         mean_success_rate = RunningAverage(10)
+        mean_reward = RunningAverage(10)
         mean_episode_length = RunningAverage(10)
+        asym_success_rate = RunningAverage(10)
+        asym_reward = RunningAverage(10)
+        asym_episode_length = RunningAverage(10)
 
     # Logging setup
     logger = get_logger(policy_path, args, wandb_kwargs)
@@ -434,10 +493,14 @@ def run_experiment(args):
         policy_path,
         args.save_policy,
         logger,
-        mean_reward,
         mean_success_rate,
+        mean_reward,
         mean_episode_length,
+        asym_success_rate,
+        asym_reward,
+        asym_episode_length,
         time_remaining,
+        args.asymmetric,
         args.verbose,
     )
 

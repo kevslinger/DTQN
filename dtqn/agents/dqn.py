@@ -1,4 +1,5 @@
 from typing import Callable, Union, Tuple
+from enum import Enum
 import random
 
 import torch
@@ -15,6 +16,12 @@ from utils.epsilon_anneal import LinearAnneal
 from utils.random import RNG
 
 
+class TrainMode(Enum):
+    TRAIN = 1
+    EVAL = 2
+    EVAL_ASYM = 3
+
+
 class DqnAgent:
     def __init__(
         self,
@@ -29,6 +36,7 @@ class DqnAgent:
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 1,
+        eval_context_len: int = 1,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
@@ -83,25 +91,38 @@ class DqnAgent:
         self.target_min = RunningAverage(100)
 
         self.num_actions = num_actions
-        self.train_mode = True
+        self.train_mode = TrainMode.TRAIN
         self.obs_mask = obs_mask
+        # TODO: Assymetric stuff
         self.train_context = Context(
             context_len, obs_mask, self.num_actions, env_obs_length
         )
         self.eval_context = Context(
             context_len, obs_mask, self.num_actions, env_obs_length
         )
+        self.asym_eval_context = Context(
+            eval_context_len, obs_mask, self.num_actions, env_obs_length
+        )
 
     @property
     def context(self) -> Context:
-        return self.train_context if self.train_mode else self.eval_context
+        if self.train_mode == TrainMode.TRAIN:
+            return self.train_context
+        elif self.train_mode == TrainMode.EVAL:
+            return self.eval_context
+        else:
+            return self.asym_eval_context
 
     def eval_on(self) -> None:
-        self.train_mode = False
+        self.train_mode = TrainMode.EVAL
+        self.policy_network.eval()
+
+    def eval_on_asym(self) -> None:
+        self.train_mode = TrainMode.EVAL_ASYM
         self.policy_network.eval()
 
     def eval_off(self) -> None:
-        self.train_mode = True
+        self.train_mode = TrainMode.TRAIN
         self.policy_network.train()
 
     @torch.no_grad()
@@ -121,12 +142,12 @@ class DqnAgent:
         return torch.argmax(q_values).item()
 
     def observe(self, obs, action, reward, done) -> None:
-        if self.train_mode:
+        if self.train_mode == TrainMode.TRAIN:
             self.replay_buffer.store(obs, action, reward, done)
 
     def context_reset(self, obs: np.ndarray) -> None:
         self.context.reset(obs)
-        if self.train_mode:
+        if self.train_mode == TrainMode.TRAIN:
             self.replay_buffer.store_obs(obs)
 
     def train(self) -> None:
@@ -213,9 +234,12 @@ class DqnAgent:
         self,
         checkpoint_dir: str,
         wandb_id: str,
-        episode_rewards: RunningAverage,
         episode_successes: RunningAverage,
+        episode_rewards: RunningAverage,
         episode_lengths: RunningAverage,
+        asym_successes: RunningAverage,
+        asym_rewards: RunningAverage,
+        asym_lengths: RunningAverage,
         eps: LinearAnneal,
     ) -> None:
         self.save_mini_checkpoint(checkpoint_dir=checkpoint_dir, wandb_id=wandb_id)
@@ -233,9 +257,12 @@ class DqnAgent:
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "epsilon": eps.val,
                 # Results
-                "episode_rewards": episode_rewards,
                 "episode_successes": episode_successes,
+                "episode_rewards": episode_rewards,
                 "episode_lengths": episode_lengths,
+                "asym_successes": asym_successes,
+                "asym_rewards": asym_rewards,
+                "asym_lengths": asym_lengths,
                 # Losses
                 "td_errors": self.td_errors,
                 "grad_norms": self.grad_norms,
@@ -302,16 +329,22 @@ class DqnAgent:
             torch.cuda.set_rng_state(checkpoint["torch_cuda_rng_state"])
 
         # Results
-        episode_rewards = checkpoint["episode_rewards"]
         episode_successes = checkpoint["episode_successes"]
+        episode_rewards = checkpoint["episode_rewards"]
         episode_lengths = checkpoint["episode_lengths"]
+        asym_successes = checkpoint["asym_successes"]
+        asym_rewards = checkpoint["asym_rewards"]
+        asym_lengths = checkpoint["asym_lengths"]
         # Exploration value
         epsilon = checkpoint["epsilon"]
 
         return (
             checkpoint["wandb_id"],
-            episode_rewards,
             episode_successes,
+            episode_rewards,
             episode_lengths,
+            asym_successes,
+            asym_rewards,
+            asym_lengths,
             epsilon,
         )

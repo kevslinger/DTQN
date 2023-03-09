@@ -125,7 +125,9 @@ class DTQN(nn.Module):
                 transformer_block(
                     num_heads,
                     inner_embed_size,
-                    history_len + bag_size + 1,  # Need +1 for the bag eviction policy
+                    history_len + bag_size + 1 # Need +1 for the bag eviction policy if we're using a bag
+                    if bag_size > 0
+                    else history_len,
                     dropout,
                     attn_gate,
                     mlp_gate,

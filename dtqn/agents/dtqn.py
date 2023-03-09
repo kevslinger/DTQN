@@ -6,6 +6,7 @@ from torch.nn import Module
 import torch.nn.functional as F
 
 from dtqn.agents.drqn import DrqnAgent
+from dtqn.agents.dqn import TrainMode
 from utils.env_processing import Bag
 from utils.random import RNG
 
@@ -25,12 +26,14 @@ class DtqnAgent(DrqnAgent):
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 50,
+        eval_context_len: int = 50,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
         embed_size: int = 64,
         history: bool = True,
-        bag_size: int = 10,
+        bag_size: int = 0,
+        eval_bag_size: int = 10,
         **kwargs,
     ):
         super().__init__(
@@ -45,20 +48,25 @@ class DtqnAgent(DrqnAgent):
             learning_rate,
             batch_size,
             context_len,
+            eval_context_len,
             gamma,
             grad_norm_clip,
             target_update_frequency,
             embed_size,
             history,
         )
-
-        self.bag_size = bag_size
         self.train_bag = Bag(bag_size, obs_mask, env_obs_length)
         self.eval_bag = Bag(bag_size, obs_mask, env_obs_length)
+        self.asym_eval_bag = Bag(eval_bag_size, obs_mask, env_obs_length)
 
     @property
     def bag(self) -> Bag:
-        return self.train_bag if self.train_mode else self.eval_bag
+        if self.train_mode == TrainMode.TRAIN:
+            return self.train_bag
+        elif self.train_mode == TrainMode.EVAL:
+            return self.eval_bag
+        else:
+            return self.asym_eval_bag
 
     @torch.no_grad()
     def get_action(self, epsilon: float = 0.0) -> int:
@@ -77,7 +85,7 @@ class DtqnAgent(DrqnAgent):
             torch.as_tensor(
                 self.bag.bag, dtype=self.obs_tensor_type, device=self.device
             ).unsqueeze(0)
-            if self.bag_size > 0
+            if self.bag.size > 0
             else None,
         )
         # We take the argmax of the last timestep's Q values
@@ -86,28 +94,26 @@ class DtqnAgent(DrqnAgent):
 
     def context_reset(self, obs: np.ndarray) -> None:
         self.context.reset(obs)
-        if self.train_mode:
+        if self.train_mode == TrainMode.TRAIN:
             self.replay_buffer.store_obs(obs)
-        if self.bag_size > 0:
+        if self.bag.size > 0:
             self.bag.reset()
 
-    def observe(
-        self, obs: np.ndarray, action: int, reward: float, done: bool, bag: bool = True
-    ) -> None:
+    def observe(self, obs: np.ndarray, action: int, reward: float, done: bool) -> None:
         """Add an observation to the context. If the context would evict an observation to make room,
         attempt to put the observation in the bag, which may require evicting something else from the bag.
 
         If we're in train mode, then we also add the transition to our replay buffer."""
         evicted_obs = self.context.add_transition(obs, action, reward, done)
         # If there is an evicted obs, we need to decide if it should go in the bag or not
-        if self.bag_size > 0 and evicted_obs is not None:
+        if self.bag.size > 0 and evicted_obs is not None:
             # Bag is already full
             if not self.bag.add(evicted_obs):
                 # For each possible bag, get the Q-values
-                possible_bags = np.tile(self.bag.bag, (self.bag_size + 1, 1, 1))
-                for i in range(self.bag_size):
-                    possible_bags[i, i] = evicted_obs  # TODO: Need to copy?
-                tiled_context = np.tile(self.context.obs[1:], (self.bag_size + 1, 1, 1))
+                possible_bags = np.tile(self.bag.bag, (self.bag.size + 1, 1, 1))
+                for i in range(self.bag.size):
+                    possible_bags[i, i] = evicted_obs
+                tiled_context = np.tile(self.context.obs[1:], (self.bag.size + 1, 1, 1))
                 context_tensor = torch.as_tensor(
                     self.context.obs[1:],
                     dtype=self.obs_tensor_type,
@@ -140,14 +146,14 @@ class DtqnAgent(DrqnAgent):
                 )
                 self.bag.bag = possible_bags[bag_idx]
 
-        if self.train_mode:
+        if self.train_mode == TrainMode.TRAIN:
             self.replay_buffer.store(obs, action, reward, done, self.context.timestep)
 
     def train(self) -> None:
         if not self.replay_buffer.can_sample(self.batch_size):
             return
         self.eval_off()
-        if self.bag_size > 0:
+        if self.bag.size > 0:
             (
                 obss,
                 actions,
