@@ -104,10 +104,6 @@ class DTQN(nn.Module):
             else:
                 raise AssertionError(f"pos must be either int or sin but was {pos}")
 
-        self.bag_embed = nn.Parameter(
-            torch.zeros(1, 1, inner_embed_size),
-            requires_grad=True if bag_size > 0 else False,
-        )
         self.dropout = nn.Dropout(dropout)
 
         if gate == "gru":
@@ -194,20 +190,21 @@ class DTQN(nn.Module):
         ), f"Obs dim is incorrect. Expected {self.obs_dim} got {obs_dim}"
 
         token_embeddings = self.obs_embedding(obss)
-        # batch_size x hist_len x obs_dim
-        x = token_embeddings + self.position_embedding[:, :history_len, :]
+        
         if bag is not None:
             bag_embeddings = self.obs_embedding(bag)
             x = self.dropout(
                 torch.cat(
                     (
-                        bag_embeddings + self.bag_embed,
-                        x,
+                        bag_embeddings + self.position_embedding[:, :bag.size(1), :],
+                        token_embeddings + self.position_embedding[:, bag.size(1):bag.size(1)+history_len, :],
                     ),
                     dim=1,
                 )
             )
         else:
+            # batch_size x hist_len x obs_dim
+            x = token_embeddings + self.position_embedding[:, :history_len, :]
             x = self.dropout(x)
         # Send through transformer
         x = self.transformer_layers(x)

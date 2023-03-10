@@ -113,9 +113,9 @@ class DtqnAgent(DrqnAgent):
                 possible_bags = np.tile(self.bag.bag, (self.bag.size + 1, 1, 1))
                 for i in range(self.bag.size):
                     possible_bags[i, i] = evicted_obs
-                tiled_context = np.tile(self.context.obs[1:], (self.bag.size + 1, 1, 1))
+                tiled_context = np.tile(self.context.obs, (self.bag.size + 1, 1, 1))
                 context_tensor = torch.as_tensor(
-                    self.context.obs[1:],
+                    self.context.obs,
                     dtype=self.obs_tensor_type,
                     device=self.device,
                 ).unsqueeze(0)
