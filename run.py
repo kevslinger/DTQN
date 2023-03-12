@@ -427,8 +427,8 @@ def run_experiment(args):
     os.makedirs(policy_save_dir, exist_ok=True)
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_env={args.env}_obsembed={args.obsembed}_inembed={args.inembed}_context={args.context}_heads={args.heads}_layers={args.layers}_"
-        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
+        f"model={args.model}_env={args.env}_obsembed={args.obsembed}_inembed={args.inembed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
+        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_eval_bag={args.eval_bag_size}_seed={args.seed}",
     )
 
     # Enjoy mode
