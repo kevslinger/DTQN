@@ -83,9 +83,9 @@ class DtqnAgent(DrqnAgent):
         q_values = self.policy_network(
             context_tensor,
             torch.as_tensor(
-                self.bag.bag, dtype=self.obs_tensor_type, device=self.device
+                self.bag.export(), dtype=self.obs_tensor_type, device=self.device
             ).unsqueeze(0)
-            if self.bag.size > 0
+            if self.bag.pos > 0
             else None,
         )
         # We take the argmax of the last timestep's Q values
