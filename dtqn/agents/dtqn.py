@@ -136,14 +136,8 @@ class DtqnAgent(DrqnAgent):
                     ).unsqueeze(0),
                 )
 
-                bag_idx = torch.argmin(
-                    torch.mean(
-                        torch.flatten(
-                            torch.cdist(q_values, baseline_q_values, p=1), start_dim=1
-                        ),
-                        1,
-                    )
-                )
+                # bag_idx = torch.argmin(torch.sum(torch.flatten(torch.abs(q_values - baseline_q_values), start_dim=1), 1))
+                bag_idx = torch.argmax(torch.mean(torch.max(q_values, 2)[0], 1))
                 self.bag.bag = possible_bags[bag_idx]
 
         if self.train_mode == TrainMode.TRAIN:
