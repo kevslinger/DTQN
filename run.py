@@ -9,7 +9,7 @@ from gym import Env
 
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
-from utils.random import set_global_seed
+from utils.random import set_global_seed, RNG
 from utils.logging_utils import RunningAverage, get_logger, timestamp
 
 
@@ -368,7 +368,7 @@ def prepopulate(agent, prepop_steps: int, env: Env):
         agent.context_reset(env.reset())
         done = False
         while not done:
-            action = env.action_space.sample()
+            action = RNG.rng.integers(env.action_space.n)
             next_obs, reward, done, info = env.step(action)
 
             # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done

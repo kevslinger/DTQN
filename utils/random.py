@@ -27,7 +27,11 @@ def set_global_seed(
     torch.manual_seed(tseed)
     np.random.seed(npseed)
     env.seed(seed=seed)
+    env.observation_space.seed(seed=seed)
+    env.action_space.seed(seed=seed)
     if eval_env is not None:
         eval_env.seed(seed=seed)
+        eval_env.observation_space.seed(seed=seed)
+        eval_env.action_space.seed(seed=seed)
     os.environ["PYTHONHASHSEED"] = str(ospyseed)
     RNG.rng = np.random.Generator(np.random.PCG64(seed=seed))
