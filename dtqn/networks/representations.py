@@ -1,27 +1,31 @@
 from __future__ import annotations
-from typing import Tuple
+from typing import Tuple, Optional
 import math
 
 import torch
 import torch.nn as nn
 
 
-class EmbeddingRepresentation(nn.Module):
-    def __init__(self, embedding):
+class ObservationEmbeddingRepresentation(nn.Module):
+    def __init__(
+        self,
+        observation_embedding: nn.Module,
+    ):
         super().__init__()
-        self.embedding = embedding
+        self.observation_embedding = observation_embedding
 
     def forward(self, obs: torch.Tensor):
         batch, seq = obs.size(0), obs.size(1)
         # Flatten batch and seq dims
         obs = torch.flatten(obs, start_dim=0, end_dim=1)
-        embed = self.embedding(obs)
-        return embed.reshape(batch, seq, embed.size(-1))
+        obs_embed = self.observation_embedding(obs)
+        obs_embed = obs_embed.reshape(batch, seq, obs_embed.size(-1))
+        return obs_embed
 
     @staticmethod
     def make_discrete_representation(
         vocab_sizes: int, obs_dim: int, embed_per_obs_dim: int, outer_embed_size: int
-    ) -> EmbeddingRepresentation:
+    ) -> ObservationEmbeddingRepresentation:
         """
         For use in discrete observation environments.
 
@@ -34,7 +38,7 @@ class EmbeddingRepresentation(nn.Module):
         """
 
         assert (
-            vocab_sizes is not None
+            vocab_sizes > 0
         ), "Discrete environments need to have a vocab size for the token embeddings"
         assert (
             embed_per_obs_dim > 1
@@ -45,7 +49,17 @@ class EmbeddingRepresentation(nn.Module):
             nn.Flatten(start_dim=-2),
             nn.Linear(embed_per_obs_dim * obs_dim, outer_embed_size),
         )
-        return EmbeddingRepresentation(embedding=embedding)
+        return ObservationEmbeddingRepresentation(observation_embedding=embedding)
+
+    @staticmethod
+    def make_action_representation(
+        num_actions: int,
+        action_dim: int,
+    ) -> ObservationEmbeddingRepresentation:
+        embed = nn.Sequential(
+            nn.Embedding(num_actions, action_dim), nn.Flatten(start_dim=-2)
+        )
+        return ObservationEmbeddingRepresentation(observation_embedding=embed)
 
     @staticmethod
     def make_continuous_representation(obs_dim: int, outer_embed_size: int):
@@ -58,7 +72,7 @@ class EmbeddingRepresentation(nn.Module):
             embed_size: The length of the resulting embedding vector
         """
         embedding = nn.Linear(obs_dim, outer_embed_size)
-        return EmbeddingRepresentation(embedding=embedding)
+        return ObservationEmbeddingRepresentation(observation_embedding=embedding)
 
     @staticmethod
     def make_image_representation(obs_dim: Tuple, outer_embed_size: int):
@@ -113,7 +127,7 @@ class EmbeddingRepresentation(nn.Module):
             nn.Flatten(),
             nn.Linear(128 * flattened_size, outer_embed_size),
         )
-        return EmbeddingRepresentation(embedding=embedding)
+        return ObservationEmbeddingRepresentation(observation_embedding=embedding)
 
 
 def compute_flattened_size(
@@ -127,3 +141,15 @@ def compute_flattened_size(
 
 def update_size(component: int, kernel: int, padding: int, stride: int) -> int:
     return math.floor((component - kernel + 2 * padding) / stride) + 1
+
+
+class ActionEmbeddingRepresentation(nn.Module):
+    def __init__(self, num_actions: int, action_dim: int):
+        super().__init__()
+        self.embedding = nn.Sequential(
+            nn.Embedding(num_actions, action_dim),
+            nn.Flatten(start_dim=-2),
+        )
+
+    def forward(self, action: torch.Tensor):
+        return self.embedding(action)

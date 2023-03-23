@@ -86,13 +86,19 @@ def get_args():
         help="For DRQN and DTQN, the context length to use to train the network.",
     )
     parser.add_argument(
-        "--obsembed",
+        "--obs-embed",
         type=int,
         default=8,
         help="For discrete observation domains only. The number of features to give each observation.",
     )
     parser.add_argument(
-        "--inembed",
+        "--a-embed",
+        type=int,
+        default=0,
+        help="The number of features to give each action.",
+    )
+    parser.add_argument(
+        "--in-embed",
         type=int,
         default=128,
         help="The dimensionality of the network. In the transformer, this is referred to as `d_model`.",
@@ -170,13 +176,13 @@ def get_args():
     parser.add_argument(
         "--eval-bag-size",
         type=int,
-        default=4,
+        default=0,
         help="If using asymmetric learning, this will be the size of the evaluation bag.",
     )
     parser.add_argument(
         "--eval-context",
         type=int,
-        default=10,
+        default=50,
         help="If using asymmetric learning, this will be the size of the evaluation context.",
     )
     # For slurm
@@ -395,8 +401,9 @@ def run_experiment(args):
     agent = get_agent(
         args.model,
         env,
-        args.obsembed,
-        args.inembed,
+        args.obs_embed,
+        args.a_embed,
+        args.in_embed,
         args.buf_size,
         device,
         args.lr,
@@ -427,7 +434,7 @@ def run_experiment(args):
     os.makedirs(policy_save_dir, exist_ok=True)
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_env={args.env}_obsembed={args.obsembed}_inembed={args.inembed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
+        f"model={args.model}_env={args.env}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
         f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_eval_bag={args.eval_bag_size}_seed={args.seed}",
     )
 

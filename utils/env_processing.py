@@ -271,7 +271,7 @@ class Bag:
             return False
 
     def export(self) -> np.ndarray:
-        return self.bag[:self.pos]
+        return self.bag[: self.pos]
 
     def make_empty_bag(self) -> np.ndarray:
         # Image

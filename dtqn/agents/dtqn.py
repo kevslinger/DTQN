@@ -83,6 +83,13 @@ class DtqnAgent(DrqnAgent):
         q_values = self.policy_network(
             context_tensor,
             torch.as_tensor(
+                self.context.action[
+                    : min(self.context.max_length, self.context.timestep + 1)
+                ],
+                dtype=torch.long,
+                device=self.device,
+            ).unsqueeze(0),
+            torch.as_tensor(
                 self.bag.export(), dtype=self.obs_tensor_type, device=self.device
             ).unsqueeze(0)
             if self.bag.pos > 0
@@ -136,7 +143,6 @@ class DtqnAgent(DrqnAgent):
                     ).unsqueeze(0),
                 )
 
-                # bag_idx = torch.argmin(torch.sum(torch.flatten(torch.abs(q_values - baseline_q_values), start_dim=1), 1))
                 bag_idx = torch.argmax(torch.mean(torch.max(q_values, 2)[0], 1))
                 self.bag.bag = possible_bags[bag_idx]
 
@@ -153,6 +159,7 @@ class DtqnAgent(DrqnAgent):
                 actions,
                 rewards,
                 next_obss,
+                next_actions,
                 dones,
                 episode_lengths,
                 bags,
@@ -165,6 +172,7 @@ class DtqnAgent(DrqnAgent):
                 actions,
                 rewards,
                 next_obss,
+                next_actions,
                 dones,
                 episode_lengths,
             ) = self.replay_buffer.sample(self.batch_size)
@@ -177,6 +185,7 @@ class DtqnAgent(DrqnAgent):
         )
         # Actions: [batch-size x hist-len x 1]
         actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
+        next_actions = torch.as_tensor(next_actions, dtype=torch.long, device=self.device)
         # Rewards: [batch-size x hist-len x 1]
         rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
         # Dones: [batch-size x hist-len x 1]
@@ -184,13 +193,14 @@ class DtqnAgent(DrqnAgent):
 
         # obss is [batch-size x hist-len x obs-len]
         # then q_values is [batch-size x hist-len x n-actions]
-        q_values = self.policy_network(obss, bags)
+        q_values = self.policy_network(obss, actions, bags)
 
         # After gathering, Q values becomes [batch-size x hist-len x 1] then
         # after squeeze becomes [batch-size x hist-len]
         if self.history:
             q_values = q_values.gather(2, actions).squeeze()
         else:
+            # TODO: Set to episode_lengths for each q_value?
             q_values = q_values[:, -1, :].gather(1, actions[:, -1, :]).squeeze()
 
         with torch.no_grad():
@@ -199,9 +209,9 @@ class DtqnAgent(DrqnAgent):
             # to become [batch-size x hist-len]
             if self.history:
                 argmax = torch.argmax(
-                    self.policy_network(next_obss, bags), dim=2
+                    self.policy_network(next_obss, actions, bags), dim=2
                 ).unsqueeze(-1)
-                next_obs_q_values = self.target_network(next_obss, bags)
+                next_obs_q_values = self.target_network(next_obss, next_actions, bags)
                 next_obs_q_values = next_obs_q_values.gather(2, argmax).squeeze()
             else:
                 argmax = torch.argmax(

@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import Optional, Union
-from dtqn.networks.representations import EmbeddingRepresentation
+from dtqn.networks.representations import (
+    ObservationEmbeddingRepresentation,
+    ActionEmbeddingRepresentation,
+)
 from dtqn.networks.gates import GRUGate, ResGate
 from dtqn.networks.transformer import TransformerLayer, TransformerIdentityLayer
 
@@ -50,6 +53,7 @@ class DTQN(nn.Module):
         obs_dim: int,
         num_actions: int,
         embed_per_obs_dim: int,
+        action_dim: int,
         inner_embed_size: int,
         num_heads: int,
         num_layers: int,
@@ -66,35 +70,42 @@ class DTQN(nn.Module):
         super().__init__()
         self.obs_dim = obs_dim
         self.discrete = discrete
-        # Input Embedding
-        if isinstance(obs_dim, tuple):
-            self.obs_embedding = EmbeddingRepresentation.make_image_representation(
-                obs_dim=obs_dim, outer_embed_size=inner_embed_size
+        # Input Embedding: Allocate space for the action embedding
+        obs_output_dim = inner_embed_size - action_dim
+        if action_dim > 0:
+            self.action_embedding = ActionEmbeddingRepresentation(
+                num_actions=num_actions, action_dim=action_dim
             )
         else:
-            if discrete:
-                self.obs_embedding = (
-                    EmbeddingRepresentation.make_discrete_representation(
-                        vocab_sizes=vocab_sizes,
-                        obs_dim=obs_dim,
-                        embed_per_obs_dim=embed_per_obs_dim,
-                        outer_embed_size=inner_embed_size,
-                    )
+            self.action_embedding = None
+        # Image observation domains
+        if isinstance(obs_dim, tuple):
+            self.obs_embedding = (
+                ObservationEmbeddingRepresentation.make_image_representation(
+                    obs_dim=obs_dim, outer_embed_size=obs_output_dim
                 )
-            else:
-                self.obs_embedding = (
-                    EmbeddingRepresentation.make_continuous_representation(
-                        obs_dim=obs_dim, outer_embed_size=inner_embed_size
-                    )
+            )
+        # Discrete or MultiDiscrete observation domains
+        elif discrete:
+            self.obs_embedding = (
+                ObservationEmbeddingRepresentation.make_discrete_representation(
+                    vocab_sizes=vocab_sizes,
+                    obs_dim=obs_dim,
+                    embed_per_obs_dim=embed_per_obs_dim,
+                    outer_embed_size=obs_output_dim,
                 )
+            )
+        # Continuous observation domains
+        else:
+            self.obs_embedding = (
+                ObservationEmbeddingRepresentation.make_continuous_representation(
+                    obs_dim=obs_dim, outer_embed_size=obs_output_dim
+                )
+            )
 
         # If pos is 0, the positional embeddings are just 0s. Otherwise, they become learnables that initialise as 0s
         try:
             pos = int(pos)
-            self.position_embedding = nn.Parameter(
-                torch.zeros(1, history_len, inner_embed_size),
-                requires_grad=False if pos == 0 else True,
-            )
         except ValueError:
             if pos == "sin":
                 self.position_embedding = nn.Parameter(
@@ -103,6 +114,11 @@ class DTQN(nn.Module):
                 )
             else:
                 raise AssertionError(f"pos must be either int or sin but was {pos}")
+        else:
+            self.position_embedding = nn.Parameter(
+                torch.zeros(1, history_len, inner_embed_size),
+                requires_grad=pos != 0,
+            )
 
         self.dropout = nn.Dropout(dropout)
 
@@ -112,6 +128,9 @@ class DTQN(nn.Module):
         elif gate == "res":
             attn_gate = ResGate()
             mlp_gate = ResGate()
+        else:
+            raise ValueError("Gate must be one of `gru`, `res`")
+
         if identity:
             transformer_block = TransformerIdentityLayer
         else:
@@ -121,7 +140,9 @@ class DTQN(nn.Module):
                 transformer_block(
                     num_heads,
                     inner_embed_size,
-                    history_len + bag_size + 1 # Need +1 for the bag eviction policy if we're using a bag
+                    history_len
+                    + bag_size
+                    + 1  # Need +1 for the bag eviction policy if we're using a bag
                     if bag_size > 0
                     else history_len,
                     dropout,
@@ -156,28 +177,11 @@ class DTQN(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def forward(self, obss: torch.Tensor) -> torch.Tensor:
-        history_len = obss.size(1)
-        # if the observations are images, obs_dim is the dimensions of the image
-        obs_dim = obss.size()[2:] if len(obss.size()) > 3 else obss.size(2)
-        assert (
-            history_len <= self.history_len
-        ), "Cannot forward, history is longer than expected."
-        assert (
-            obs_dim == self.obs_dim
-        ), f"Obs dim is incorrect. Expected {self.obs_dim} got {obs_dim}"
-
-        token_embeddings = self.obs_embedding(obss)
-        # batch_size x hist_len x obs_dim
-        x = self.dropout(token_embeddings + self.position_embedding[:, :history_len, :])
-        # Send through transformer
-        x = self.transformer_layers(x)
-        # Norm and run through a linear layer to get to action space
-        x = self.layernorm(x)
-        return self.ffn(x)
-
     def forward(
-        self, obss: torch.Tensor, bag: Optional[torch.Tensor] = None
+        self,
+        obss: torch.Tensor,
+        actions: Optional[torch.Tensor] = None,
+        bag: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         history_len = obss.size(1)
         # If the observations are images, obs_dim is the dimensions of the image
@@ -190,14 +194,26 @@ class DTQN(nn.Module):
         ), f"Obs dim is incorrect. Expected {self.obs_dim} got {obs_dim}"
 
         token_embeddings = self.obs_embedding(obss)
+
+        if self.action_embedding is not None:
+            action_embed = self.action_embedding(actions)
         
+            if history_len > 1:
+                action_embed = torch.roll(action_embed, 1, 1)
+                # First observation in the sequence doesn't have a previous action, so zero the features
+                action_embed[:, 0, :] = 0.0
+            token_embeddings = torch.concat([action_embed, token_embeddings], dim=-1)
+
         if bag is not None:
             bag_embeddings = self.obs_embedding(bag)
             x = self.dropout(
                 torch.cat(
                     (
-                        bag_embeddings + self.position_embedding[:, :bag.size(1), :],
-                        token_embeddings + self.position_embedding[:, bag.size(1):bag.size(1)+history_len, :],
+                        bag_embeddings + self.position_embedding[:, : bag.size(1), :],
+                        token_embeddings
+                        + self.position_embedding[
+                            :, bag.size(1) : bag.size(1) + history_len, :
+                        ],
                     ),
                     dim=1,
                 )

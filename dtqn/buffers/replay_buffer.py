@@ -53,8 +53,9 @@ class ReplayBuffer:
                 dtype=np.float32,
             )
 
+        # Need the +1 so we have space to roll for the first observation
         self.actions = np.zeros(
-            [self.max_size, max_episode_steps, 1],
+            [self.max_size, max_episode_steps + 1, 1],
             dtype=np.uint8,
         )
         self.rewards = np.zeros(
@@ -120,7 +121,7 @@ class ReplayBuffer:
                 dtype=np.float32,
             )
         self.actions[episode_idx] = np.zeros(
-            [self.max_episode_steps, 1],
+            [self.max_episode_steps + 1, 1],
             dtype=np.uint8,
         )
         self.rewards[episode_idx] = np.zeros(
@@ -161,6 +162,7 @@ class ReplayBuffer:
             self.actions[episode_idxes, transitions],
             self.rewards[episode_idxes, transitions],
             self.obss[episode_idxes, 1 + transitions],
+            self.actions[episode_idxes, 1 + transitions],
             self.dones[episode_idxes, transitions],
             self.episode_lengths[episode_idxes],
         )
@@ -232,6 +234,7 @@ class ReplayBuffer:
             self.actions[episode_idxes, transitions],
             self.rewards[episode_idxes, transitions],
             self.obss[episode_idxes, 1 + transitions],
+            self.actions[episode_idxes, 1 + transitions],
             self.dones[episode_idxes, transitions],
             self.episode_lengths[episode_idxes],
             bags,

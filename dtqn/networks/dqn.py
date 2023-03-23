@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 from typing import Optional
-from dtqn.networks.representations import EmbeddingRepresentation
+from dtqn.networks.representations import ObservationEmbeddingRepresentation
 
 
 class DQN(nn.Module):
@@ -20,20 +20,26 @@ class DQN(nn.Module):
         super().__init__()
         # Input Embedding
         if isinstance(obs_dim, tuple):
-            self.obs_embed = EmbeddingRepresentation.make_image_representation(
-                obs_dim=obs_dim, outer_embed_size=inner_embed_size
+            self.obs_embed = (
+                ObservationEmbeddingRepresentation.make_image_representation(
+                    obs_dim=obs_dim, outer_embed_size=inner_embed_size
+                )
             )
         else:
             if is_discrete_env:
-                self.obs_embed = EmbeddingRepresentation.make_discrete_representation(
-                    vocab_sizes=obs_vocab_size,
-                    obs_dim=obs_dim,
-                    embed_per_obs_dim=embed_per_obs_dim,
-                    outer_embed_size=inner_embed_size,
+                self.obs_embed = (
+                    ObservationEmbeddingRepresentation.make_discrete_representation(
+                        vocab_sizes=obs_vocab_size,
+                        obs_dim=obs_dim,
+                        embed_per_obs_dim=embed_per_obs_dim,
+                        outer_embed_size=inner_embed_size,
+                    )
                 )
             else:
-                self.obs_embed = EmbeddingRepresentation.make_continuous_representation(
-                    obs_dim=obs_dim, outer_embed_size=inner_embed_size
+                self.obs_embed = (
+                    ObservationEmbeddingRepresentation.make_continuous_representation(
+                        obs_dim=obs_dim, outer_embed_size=inner_embed_size
+                    )
                 )
 
         self.ffn = nn.Sequential(

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils.rnn as rnn
 from typing import Optional
-from dtqn.networks.representations import EmbeddingRepresentation
+from dtqn.networks.representations import ObservationEmbeddingRepresentation
 
 
 class ADRQN(nn.Module):
@@ -22,15 +22,19 @@ class ADRQN(nn.Module):
     ) -> None:
         super().__init__()
         if is_discrete_env:
-            self.obs_embed = EmbeddingRepresentation.make_discrete_representation(
-                vocab_sizes=obs_vocab_size,
-                obs_dim=input_shape,
-                embed_per_obs_dim=embed_per_obs_dim,
-                outer_embed_size=inner_embed_size,
+            self.obs_embed = (
+                ObservationEmbeddingRepresentation.make_discrete_representation(
+                    vocab_sizes=obs_vocab_size,
+                    obs_dim=input_shape,
+                    embed_per_obs_dim=embed_per_obs_dim,
+                    outer_embed_size=inner_embed_size,
+                )
             )
         else:
-            self.obs_embed = EmbeddingRepresentation.make_continuous_representation(
-                obs_dim=input_shape, outer_embed_size=inner_embed_size
+            self.obs_embed = (
+                ObservationEmbeddingRepresentation.make_continuous_representation(
+                    obs_dim=input_shape, outer_embed_size=inner_embed_size
+                )
             )
 
         self.num_actions = num_actions
