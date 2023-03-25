@@ -24,7 +24,7 @@ def sinusoidal_pos(
     return pos_encoding
 
 
-class DTQN(nn.Module):
+class DTQNBag(nn.Module):
     """Deep Transformer Q-Network for partially observable reinforcement learning.
 
     Args:
@@ -64,7 +64,6 @@ class DTQN(nn.Module):
         pos: Union[str, int] = 1,
         discrete: bool = False,
         vocab_sizes: Optional[Union[np.ndarray, int]] = None,
-        bag_size: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -140,11 +139,7 @@ class DTQN(nn.Module):
                 transformer_block(
                     num_heads,
                     inner_embed_size,
-                    history_len
-                    + bag_size
-                    + 1  # Need +1 for the bag eviction policy if we're using a bag
-                    if bag_size > 0
-                    else history_len,
+                    history_len,
                     dropout,
                     attn_gate,
                     mlp_gate,
@@ -153,9 +148,16 @@ class DTQN(nn.Module):
             ]
         )
 
+        self.bag_attention = nn.MultiheadAttention(
+            inner_embed_size,
+            num_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+
         self.layernorm = nn.LayerNorm(inner_embed_size)
         self.ffn = nn.Sequential(
-            nn.Linear(inner_embed_size, inner_embed_size),
+            nn.Linear(inner_embed_size * 2, inner_embed_size),
             nn.ReLU(),
             nn.Linear(inner_embed_size, num_actions),
         )
@@ -170,9 +172,14 @@ class DTQN(nn.Module):
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.MultiheadAttention):
-            module.in_proj_weight.data.normal_(mean=0.0, std=0.02)
-            module.out_proj.weight.data.normal_(mean=0.0, std=0.02)
+            if module.in_proj_weight is None:
+                module.q_proj_weight.data.normal_(mean=0.0, std=0.02)
+                module.k_proj_weight.data.normal_(mean=0.0, std=0.02)
+                module.v_proj_weight.data.normal_(mean=0.0, std=0.02)
+            else:
+                module.in_proj_weight.data.normal_(mean=0.0, std=0.02)
             module.in_proj_bias.data.zero_()
+            module.out_proj.weight.data.normal_(mean=0.0, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -181,8 +188,14 @@ class DTQN(nn.Module):
         self,
         obss: torch.Tensor,
         actions: Optional[torch.Tensor] = None,
-        bag: Optional[torch.Tensor] = None,
+        bag_obss: Optional[torch.Tensor] = None,
+        bag_actions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """
+        obss    is  batch x seq_len  x obs_dim
+        actions is  batch x seq_len  x       1
+        bag     is  batch x bag_size x obs_dim
+        """
         history_len = obss.size(1)
         # If the observations are images, obs_dim is the dimensions of the image
         obs_dim = obss.size()[2:] if len(obss.size()) > 3 else obss.size(2)
@@ -193,36 +206,32 @@ class DTQN(nn.Module):
             obs_dim == self.obs_dim
         ), f"Obs dim is incorrect. Expected {self.obs_dim} got {obs_dim}"
 
+        # [batch x seq_len x obs_dim] -> [batch x seq_len x obs_embed]
         token_embeddings = self.obs_embedding(obss)
 
+        # Just to keep shapes correct if we choose to disble including actions
         if self.action_embedding is not None:
+            # [batch x seq_len x 1] -> [batch x seq_len x action_embed]
             action_embed = self.action_embedding(actions)
 
             if history_len > 1:
                 action_embed = torch.roll(action_embed, 1, 1)
                 # First observation in the sequence doesn't have a previous action, so zero the features
                 action_embed[:, 0, :] = 0.0
+            # [batch x seq_len x action_embed] + [batch x seq_len x obs_embed] -> [batch x seq_len x model_embed]
             token_embeddings = torch.concat([action_embed, token_embeddings], dim=-1)
+        # [batch x seq_len x model_embed] -> [batch x seq_len x model_embed]
+        working_memory = self.transformer_layers(
+            self.dropout(token_embeddings + self.position_embedding[:, :history_len, :])
+        )
+        # [batch x bag_size x action_embed] + [batch x bag_size x obs_embed] -> [batch x bag_size x model_embed]
+        bag_embeddings = torch.concat(
+            [self.action_embedding(bag_actions), self.obs_embedding(bag_obss)], dim=-1
+        )
+        # [batch x seq_len x model_embed] x [batch x bag_size x model_embed] -> [batch x seq_len x model_embed]
+        persistent_memory, _ = self.bag_attention(
+            working_memory, bag_embeddings, bag_embeddings
+        )
 
-        if bag is not None:
-            bag_embeddings = self.obs_embedding(bag)
-            x = self.dropout(
-                torch.cat(
-                    (
-                        bag_embeddings + self.position_embedding[:, : bag.size(1), :],
-                        token_embeddings
-                        + self.position_embedding[
-                            :, bag.size(1) : bag.size(1) + history_len, :
-                        ],
-                    ),
-                    dim=1,
-                )
-            )
-        else:
-            # batch_size x hist_len x obs_dim
-            x = token_embeddings + self.position_embedding[:, :history_len, :]
-            x = self.dropout(x)
-        # Send through transformer
-        x = self.transformer_layers(x)
-        # Run through a linear layer to get to action space
-        return self.ffn(x)[:, -history_len:, :]
+        # print(f"Size of working memory: {working_memory.size()}\nSize of persistent memory: {persistent_memory.size()}")
+        return self.ffn(torch.concat([working_memory, persistent_memory], dim=-1))

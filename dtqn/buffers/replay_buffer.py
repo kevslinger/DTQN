@@ -178,6 +178,8 @@ class ReplayBuffer:
         np.ndarray,
         np.ndarray,
         np.ndarray,
+        np.ndarray,
+        np.ndarray
     ]:
         episode_idxes = np.array(
             [
@@ -207,28 +209,43 @@ class ReplayBuffer:
         )
 
         # Create `batch_size` replica bags
-        bags = np.full(
-            [batch_size, sample_bag.bag_size, sample_bag.obs_length],
+        bag_obss = np.full(
+            [batch_size, sample_bag.size, sample_bag.obs_length],
             sample_bag.obs_mask,
+        )
+        bag_actions = np.full(
+            [batch_size, sample_bag.size, 1],
+            0,
         )
 
         # Sample from the bag with observations that won't be in the main context
         for bag_idx in range(batch_size):
             # Possible bag is smaller than max bag size, so take all of it
-            if transition_starts[bag_idx] < sample_bag.bag_size:
-                bags[bag_idx, : transition_starts[bag_idx]] = self.obss[
+            if transition_starts[bag_idx] < sample_bag.size:
+                bag_obss[bag_idx, : transition_starts[bag_idx]] = self.obss[
+                    episode_idxes[bag_idx], : transition_starts[bag_idx]
+                ]
+                bag_actions[bag_idx, : transition_starts[bag_idx]] = self.actions[
                     episode_idxes[bag_idx], : transition_starts[bag_idx]
                 ]
             # Otherwise, randomly sample
             else:
-                bags[bag_idx] = np.array(
+                bag_obss[bag_idx] = np.array(
                     random.sample(
                         self.obss[episode_idxes[bag_idx], : transition_starts[bag_idx]]
                         .squeeze()
                         .tolist(),
-                        k=sample_bag.bag_size,
+                        k=sample_bag.size,
                     )
                 )
+                bag_actions[bag_idx] = np.expand_dims(np.array(
+                    random.sample(
+                        self.actions[episode_idxes[bag_idx], : transition_starts[bag_idx]]
+                        .squeeze()
+                        .tolist(),
+                        k=sample_bag.size
+                    )
+                ), axis=1)
         return (
             self.obss[episode_idxes, transitions],
             self.actions[episode_idxes, transitions],
@@ -237,5 +254,6 @@ class ReplayBuffer:
             self.actions[episode_idxes, 1 + transitions],
             self.dones[episode_idxes, transitions],
             self.episode_lengths[episode_idxes],
-            bags,
+            bag_obss,
+            bag_actions
         )

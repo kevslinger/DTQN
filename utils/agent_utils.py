@@ -7,6 +7,7 @@ from dtqn.networks.drqn import DRQN
 from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
 from dtqn.networks.dtqn import DTQN
+from dtqn.networks.dtqn_bag import DTQNBag
 from utils import env_processing
 import gym
 import torch
@@ -15,6 +16,7 @@ import numpy as np
 
 MODEL_MAP = {
     "DTQN": DTQN,
+    "DTQN-bag": DTQNBag,
     "ADRQN": ADRQN,
     "DRQN": DRQN,
     "DARQN": DARQN,
@@ -23,6 +25,7 @@ MODEL_MAP = {
 
 AGENT_MAP = {
     "DTQN": DtqnAgent,
+    "DTQN-bag": DtqnAgent,
     "ADRQN": AdrqnAgent,
     "DRQN": DrqnAgent,
     "DARQN": DrqnAgent,

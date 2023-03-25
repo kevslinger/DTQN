@@ -182,7 +182,7 @@ class Context:
 
     def add_transition(
         self, o: np.ndarray, a: int, r: float, done: bool
-    ) -> Union[np.ndarray, None]:
+    ) -> Tuple[Union[np.ndarray, None], Union[int, None]]:
         """Add an entire transition. If the context is full, evict the oldest transition"""
         self.obs = self.roll(self.obs)
         self.action = self.roll(self.action)
@@ -193,15 +193,17 @@ class Context:
 
         # If we are going to evict an observation, we need to return it for possibly adding to the bag
         evicted_obs = None
+        evicted_action = None
         if self.is_full:
             evicted_obs = self.obs[t].copy()
+            evicted_action = self.action[t]
 
         self.obs[min(t + 1, self.max_length - 1)] = o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
         self.timestep += 1
-        return evicted_obs
+        return evicted_obs, evicted_action
 
     def export(
         self,
@@ -255,30 +257,32 @@ class Bag:
         # Current position in bag
         self.pos = 0
 
-        self.bag = self.make_empty_bag()
+        self.obss, self.actions = self.make_empty_bag()
 
     def reset(self) -> None:
         self.pos = 0
-        self.bag = self.make_empty_bag()
+        self.obss, self.actions = self.make_empty_bag()
 
-    def add(self, obs) -> bool:
+    def add(self, obs: np.ndarray, action: int) -> bool:
         if not self.is_full:
-            self.bag[self.pos] = obs
+            self.obss[self.pos] = obs
+            self.actions[self.pos] = action
             self.pos += 1
             return True
         else:
-            # Reject adding the observation
+            # Reject adding the observation-action
             return False
 
-    def export(self) -> np.ndarray:
-        return self.bag[: self.pos]
+    def export(self) -> Tuple[np.ndarray, np.ndarray]:
+        return self.obss[: self.pos], self.actions[: self.pos]
 
     def make_empty_bag(self) -> np.ndarray:
         # Image
         if isinstance(self.obs_length, tuple):
-            return np.full((self.size, *self.obs_length), self.obs_mask)
+            return np.full((self.size, *self.obs_length), self.obs_mask), np.full((self.size, 1), 0)
+        # Non-Image
         else:
-            return np.full((self.size, self.obs_length), self.obs_mask)
+            return np.full((self.size, self.obs_length), self.obs_mask), np.full((self.size, 1), 0)
 
     @property
     def is_full(self) -> bool:
