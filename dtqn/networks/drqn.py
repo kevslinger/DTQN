@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.utils.rnn as rnn
-from typing import Optional
+from typing import Optional, Tuple
 from dtqn.networks.dqn import DQN
 
 
@@ -13,6 +13,7 @@ class DRQN(DQN):
         obs_dim: int,
         num_actions: int,
         embed_per_obs_dim: int,
+        action_dim: int,
         inner_embed: int,
         is_discrete_env: bool,
         obs_vocab_size: Optional[int] = None,
@@ -32,7 +33,8 @@ class DRQN(DQN):
         )
         self.apply(self._init_weights)
 
-    def _init_weights(self, module):
+    @staticmethod
+    def _init_weights(module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
@@ -46,27 +48,29 @@ class DRQN(DQN):
 
     def forward(
         self,
-        x: torch.tensor,
-        hidden_states: Optional[tuple] = None,
-        episode_lengths: Optional[int] = None,
-        padding_value: Optional[int] = None,
+        obss: torch.Tensor,
+        _: torch.Tensor,
+        hidden_states: Optional[Tuple[torch.Tensor]] = None,
+        episode_lengths: Optional[Tuple[int]] = None,
     ):
-        x = self.obs_embed(x)
+        token_embed = self.obs_embed(obss)
         # Hidden states are supplied when we are passing one observation
         # at a time (auto-regressively).
         if hidden_states is not None:
-            lstm_out, new_hidden = self.lstm(x, hidden_states)
+            lstm_out, new_hidden = self.lstm(token_embed, hidden_states)
         else:
-            context_length = x.size(1)
+            context_length = token_embed.size(1)
             packed_sequence = rnn.pack_padded_sequence(
-                x, episode_lengths.squeeze(), enforce_sorted=False, batch_first=True
+                token_embed,
+                episode_lengths.squeeze(),
+                enforce_sorted=False,
+                batch_first=True,
             )
             packed_output, new_hidden = self.lstm(packed_sequence)
             lstm_out, _ = rnn.pad_packed_sequence(
                 packed_output,
                 batch_first=True,
                 total_length=context_length,
-                padding_value=padding_value,
             )
 
         q_values = self.ffn(lstm_out)

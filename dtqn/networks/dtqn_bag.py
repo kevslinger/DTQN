@@ -154,6 +154,8 @@ class DTQNBag(nn.Module):
             dropout=dropout,
             batch_first=True,
         )
+        # Attention weights for bag attention
+        self.attn_weights = None
 
         self.layernorm = nn.LayerNorm(inner_embed_size)
         self.ffn = nn.Sequential(
@@ -229,7 +231,7 @@ class DTQNBag(nn.Module):
             [self.action_embedding(bag_actions), self.obs_embedding(bag_obss)], dim=-1
         )
         # [batch x seq_len x model_embed] x [batch x bag_size x model_embed] -> [batch x seq_len x model_embed]
-        persistent_memory, _ = self.bag_attention(
+        persistent_memory, self.attn_weights = self.bag_attention(
             working_memory, bag_embeddings, bag_embeddings
         )
 

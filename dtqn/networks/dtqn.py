@@ -182,6 +182,7 @@ class DTQN(nn.Module):
         obss: torch.Tensor,
         actions: Optional[torch.Tensor] = None,
         bag: Optional[torch.Tensor] = None,
+        bag_actions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         history_len = obss.size(1)
         # If the observations are images, obs_dim is the dimensions of the image
@@ -205,7 +206,9 @@ class DTQN(nn.Module):
             token_embeddings = torch.concat([action_embed, token_embeddings], dim=-1)
 
         if bag is not None:
-            bag_embeddings = self.obs_embedding(bag)
+            bag_obs_embed = self.obs_embedding(bag)
+            bag_action_embed = self.action_embedding(bag_actions)
+            bag_embeddings = torch.concat([bag_action_embed, bag_obs_embed], dim=-1)
             x = self.dropout(
                 torch.cat(
                     (

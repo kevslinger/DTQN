@@ -26,7 +26,7 @@ MODEL_MAP = {
 AGENT_MAP = {
     "DTQN": DtqnAgent,
     "DTQN-bag": DtqnAgent,
-    "ADRQN": AdrqnAgent,
+    "ADRQN": DrqnAgent,
     "DRQN": DrqnAgent,
     "DARQN": DrqnAgent,
     "DQN": DqnAgent,

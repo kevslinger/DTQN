@@ -5,13 +5,13 @@ import torch
 from torch.nn import Module
 import torch.nn.functional as F
 
-from dtqn.agents.drqn import DrqnAgent
+from dtqn.agents.drqn import DqnAgent
 from dtqn.agents.dqn import TrainMode
-from utils.env_processing import Bag
+from utils.env_processing import Context, Bag
 from utils.random import RNG
 
 
-class DtqnAgent(DrqnAgent):
+class DtqnAgent(DqnAgent):
     # noinspection PyTypeChecker
     def __init__(
         self,
@@ -30,7 +30,6 @@ class DtqnAgent(DrqnAgent):
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
-        embed_size: int = 64,
         history: bool = True,
         bag_size: int = 0,
         eval_bag_size: int = 10,
@@ -52,8 +51,22 @@ class DtqnAgent(DrqnAgent):
             gamma,
             grad_norm_clip,
             target_update_frequency,
-            embed_size,
-            history,
+        )
+        self.history = history
+        self.train_context = Context(
+            context_len,
+            obs_mask,
+            num_actions,
+            env_obs_length,
+        )
+        self.eval_context = Context(
+            context_len,
+            obs_mask,
+            num_actions,
+            env_obs_length,
+        )
+        self.asym_eval_context = Context(
+            eval_context_len, obs_mask, self.num_actions, env_obs_length
         )
         self.train_bag = Bag(bag_size, obs_mask, env_obs_length)
         self.eval_bag = Bag(bag_size, obs_mask, env_obs_length)
@@ -79,29 +92,22 @@ class DtqnAgent(DrqnAgent):
             device=self.device,
         ).unsqueeze(0)
         context_action_tensor = torch.as_tensor(
-                self.context.action[
-                    : min(self.context.max_length, self.context.timestep + 1)
-                ],
-                dtype=torch.long,
-                device=self.device,
-            ).unsqueeze(0)
+            self.context.action[
+                : min(self.context.max_length, self.context.timestep + 1)
+            ],
+            dtype=torch.long,
+            device=self.device,
+        ).unsqueeze(0)
         # Always include the full bag, even if it has padding TODO:
         bag_obs_tensor = torch.as_tensor(
-            self.bag.obss,
-            dtype=self.obs_tensor_type,
-            device=self.device
+            self.bag.obss, dtype=self.obs_tensor_type, device=self.device
         ).unsqueeze(0)
         bag_action_tensor = torch.as_tensor(
-            self.bag.actions,
-            dtype=torch.long,
-            device=self.device
+            self.bag.actions, dtype=torch.long, device=self.device
         ).unsqueeze(0)
 
         q_values = self.policy_network(
-            context_obs_tensor,
-            context_action_tensor,
-            bag_obs_tensor,
-            bag_action_tensor
+            context_obs_tensor, context_action_tensor, bag_obs_tensor, bag_action_tensor
         )
 
         # q_values = self.policy_network(
@@ -129,14 +135,18 @@ class DtqnAgent(DrqnAgent):
         attempt to put the observation in the bag, which may require evicting something else from the bag.
 
         If we're in train mode, then we also add the transition to our replay buffer."""
-        evicted_obs, evicted_action = self.context.add_transition(obs, action, reward, done)
+        evicted_obs, evicted_action = self.context.add_transition(
+            obs, action, reward, done
+        )
         # If there is an evicted obs, we need to decide if it should go in the bag or not
         if self.bag.size > 0 and evicted_obs is not None:
             # Bag is already full
             if not self.bag.add(evicted_obs, evicted_action):
                 # For each possible bag, get the Q-values
                 possible_bag_obss = np.tile(self.bag.obss, (self.bag.size + 1, 1, 1))
-                possible_bag_actions = np.tile(self.bag.actions, (self.bag.size + 1, 1, 1))
+                possible_bag_actions = np.tile(
+                    self.bag.actions, (self.bag.size + 1, 1, 1)
+                )
                 for i in range(self.bag.size):
                     possible_bag_obss[i, i] = evicted_obs
                     possible_bag_actions[i, i] = evicted_action
@@ -150,11 +160,13 @@ class DtqnAgent(DrqnAgent):
                         tiled_actions, dtype=torch.long, device=self.device
                     ),
                     torch.as_tensor(
-                        possible_bag_obss, dtype=self.obs_tensor_type, device=self.device
+                        possible_bag_obss,
+                        dtype=self.obs_tensor_type,
+                        device=self.device,
                     ),
                     torch.as_tensor(
                         possible_bag_actions, dtype=torch.long, device=self.device
-                    )
+                    ),
                 )
 
                 bag_idx = torch.argmax(torch.mean(torch.max(q_values, 2)[0], 1))
@@ -181,8 +193,12 @@ class DtqnAgent(DrqnAgent):
                 bag_actions,
             ) = self.replay_buffer.sample_with_bag(self.batch_size, self.bag)
             # Bags: [batch-size x bag-size x obs-dim]
-            bag_obss = torch.as_tensor(bag_obss, dtype=self.obs_tensor_type, device=self.device)
-            bag_actions = torch.as_tensor(bag_actions, dtype=torch.long, device=self.device)
+            bag_obss = torch.as_tensor(
+                bag_obss, dtype=self.obs_tensor_type, device=self.device
+            )
+            bag_actions = torch.as_tensor(
+                bag_actions, dtype=torch.long, device=self.device
+            )
         else:
             (
                 obss,
@@ -229,16 +245,26 @@ class DtqnAgent(DrqnAgent):
             # to become [batch-size x hist-len]
             if self.history:
                 argmax = torch.argmax(
-                    self.policy_network(next_obss, actions, bag_obss, bag_actions), dim=2
+                    self.policy_network(next_obss, next_actions, bag_obss, bag_actions),
+                    dim=2,
                 ).unsqueeze(-1)
-                next_obs_q_values = self.target_network(next_obss, next_actions, bag_obss, bag_actions)
+                next_obs_q_values = self.target_network(
+                    next_obss, next_actions, bag_obss, bag_actions
+                )
                 next_obs_q_values = next_obs_q_values.gather(2, argmax).squeeze()
             else:
                 argmax = torch.argmax(
-                    self.policy_network(next_obss)[:, -1, :], dim=1
+                    self.policy_network(next_obss, next_actions, bag_obss, bag_actions)[
+                        :, -1, :
+                    ],
+                    dim=1,
                 ).unsqueeze(-1)
                 next_obs_q_values = (
-                    self.target_network(next_obss)[:, -1, :].gather(1, argmax).squeeze()
+                    self.target_network(next_obss, next_actions, bag_obss, bag_actions)[
+                        :, -1, :
+                    ]
+                    .gather(1, argmax)
+                    .squeeze()
                 )
 
             # here goes BELLMAN

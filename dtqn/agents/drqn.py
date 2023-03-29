@@ -5,6 +5,7 @@ from torch.nn import Module
 import torch.nn.functional as F
 
 from dtqn.agents.dqn import DqnAgent, TrainMode
+from dtqn.buffers.replay_buffer import ReplayBuffer
 from utils.env_processing import Context
 from utils.random import RNG
 
@@ -62,6 +63,16 @@ class DrqnAgent(DqnAgent):
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
+        # DRQN's context length will be doubled to allow for a burn-in period
+        # so we make a new replay buffer
+        self.replay_buffer = ReplayBuffer(
+            buffer_size,
+            env_obs_length=env_obs_length,
+            obs_mask=obs_mask,
+            max_episode_steps=max_env_steps,
+            context_len=2 * context_len,
+        )
+
         self.train_context = Context(
             context_len,
             obs_mask,
@@ -77,33 +88,41 @@ class DrqnAgent(DqnAgent):
             init_hidden=hidden_states,
         )
         self.asym_eval_context = Context(
-            eval_context_len, obs_mask, self.num_actions, env_obs_length
+            eval_context_len,
+            obs_mask,
+            self.num_actions,
+            env_obs_length,
+            init_hidden=hidden_states,
         )
 
     def observe(self, obs, action, reward, done) -> None:
         self.context.add_transition(obs, action, reward, done)
         if self.train_mode == TrainMode.TRAIN:
-            o, a, r, d = self.context.export()
-            self.replay_buffer.store(
-                o,
-                a,
-                r,
-                d,
-                min(
-                    self.context_len, self.context.timestep + 1
-                ),  # TODO: Is +1 necessary?
-            )
+            self.replay_buffer.store(obs, action, reward, done, self.context.timestep)
 
     @torch.no_grad()
     def get_action(self, epsilon: float = 0.0) -> int:
-        q_values, self.context.hidden = self.policy_network(
+        observation_tensor = (
             torch.as_tensor(
                 self.context.obs[min(self.context.timestep, self.context_len - 1)],
                 dtype=self.obs_tensor_type,
                 device=self.device,
             )
             .unsqueeze(0)
-            .unsqueeze(0),
+            .unsqueeze(0)
+        )
+        action_tensor = (
+            torch.as_tensor(
+                self.context.action[min(self.context.timestep, self.context_len - 1)],
+                dtype=torch.long,
+                device=self.device,
+            )
+            .unsqueeze(0)
+            .unsqueeze(0)
+        )
+        q_values, self.context.hidden = self.policy_network(
+            observation_tensor,
+            action_tensor,
             hidden_states=self.context.hidden,
         )
         if RNG.rng.random() < epsilon:
@@ -121,6 +140,7 @@ class DrqnAgent(DqnAgent):
             actions,
             rewards,
             next_obss,
+            next_actions,
             dones,
             episode_lengths,
         ) = self.replay_buffer.sample(self.batch_size)
@@ -132,17 +152,20 @@ class DrqnAgent(DqnAgent):
         )
         # Actions starts as [batch-size x context-len x 1]
         actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
+        next_actions = torch.as_tensor(
+            next_actions, dtype=torch.long, device=self.device
+        )
         # Rewards/dones start as [batch-size x context-len x 1], squeeze to [batch-size x context-len]
         rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
         dones = torch.as_tensor(dones, dtype=torch.long, device=self.device)
         episode_lengths = torch.as_tensor(
             episode_lengths, dtype=torch.long, device=torch.device("cpu")
-        )
+        ).squeeze()
 
         # obss is [batch-size x context-len x obs-len]
         # then q_values is [batch-size x context-len x n-actions]
         q_values, _ = self.policy_network(
-            obss, episode_lengths=episode_lengths, padding_value=self.obs_mask
+            obss, actions, episode_lengths=episode_lengths
         )
 
         if self.history:
@@ -161,16 +184,16 @@ class DrqnAgent(DqnAgent):
                 argmax = torch.argmax(
                     self.policy_network(
                         next_obss,
+                        next_actions,
                         episode_lengths=episode_lengths,
-                        padding_value=self.obs_mask,
                     )[0],
                     dim=2,
                 ).unsqueeze(-1)
                 next_obs_q_values = (
                     self.target_network(
                         next_obss,
+                        next_actions,
                         episode_lengths=episode_lengths,
-                        padding_value=self.obs_mask,
                     )[0]
                     .gather(2, argmax)
                     .squeeze()
@@ -186,16 +209,16 @@ class DrqnAgent(DqnAgent):
                 argmax = torch.argmax(
                     self.policy_network(
                         next_obss,
+                        next_actions,
                         episode_lengths=episode_lengths,
-                        padding_value=self.obs_mask,
                     )[0][:, -1, :],
                     dim=1,
                 ).unsqueeze(-1)
                 next_obs_q_values = (
                     self.target_network(
                         next_obss,
+                        next_actions,
                         episode_lengths=episode_lengths,
-                        padding_value=self.obs_mask,
                     )[0][:, -1, :]
                     .gather(1, argmax)
                     .squeeze()
@@ -215,7 +238,12 @@ class DrqnAgent(DqnAgent):
         self.target_min.add(targets.min().item())
 
         # Optimization step
-        loss = F.mse_loss(q_values, targets)
+        if self.history:
+            loss = F.mse_loss(
+                q_values[:, self.context_len :], targets[:, self.context_len :]
+            )
+        else:
+            loss = F.mse_loss(q_values, targets)
         self.td_errors.add(loss.item())
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()

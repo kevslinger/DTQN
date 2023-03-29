@@ -184,6 +184,7 @@ class Context:
         self, o: np.ndarray, a: int, r: float, done: bool
     ) -> Tuple[Union[np.ndarray, None], Union[int, None]]:
         """Add an entire transition. If the context is full, evict the oldest transition"""
+        self.timestep += 1
         self.obs = self.roll(self.obs)
         self.action = self.roll(self.action)
         self.reward = self.roll(self.reward)
@@ -198,11 +199,11 @@ class Context:
             evicted_obs = self.obs[t].copy()
             evicted_action = self.action[t]
 
-        self.obs[min(t + 1, self.max_length - 1)] = o
+        self.obs[t] = o
         self.action[t] = np.array([a])
         self.reward[t] = np.array([r])
         self.done[t] = np.array([done])
-        self.timestep += 1
+
         return evicted_obs, evicted_action
 
     def export(
@@ -279,10 +280,14 @@ class Bag:
     def make_empty_bag(self) -> np.ndarray:
         # Image
         if isinstance(self.obs_length, tuple):
-            return np.full((self.size, *self.obs_length), self.obs_mask), np.full((self.size, 1), 0)
+            return np.full((self.size, *self.obs_length), self.obs_mask), np.full(
+                (self.size, 1), 0
+            )
         # Non-Image
         else:
-            return np.full((self.size, self.obs_length), self.obs_mask), np.full((self.size, 1), 0)
+            return np.full((self.size, self.obs_length), self.obs_mask), np.full(
+                (self.size, 1), 0
+            )
 
     @property
     def is_full(self) -> bool:

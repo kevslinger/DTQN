@@ -164,7 +164,7 @@ class ReplayBuffer:
             self.obss[episode_idxes, 1 + transitions],
             self.actions[episode_idxes, 1 + transitions],
             self.dones[episode_idxes, transitions],
-            self.episode_lengths[episode_idxes],
+            np.clip(self.episode_lengths[episode_idxes], 0, self.context_len),
         )
 
     # TODO:
@@ -179,7 +179,7 @@ class ReplayBuffer:
         np.ndarray,
         np.ndarray,
         np.ndarray,
-        np.ndarray
+        np.ndarray,
     ]:
         episode_idxes = np.array(
             [
@@ -238,14 +238,19 @@ class ReplayBuffer:
                         k=sample_bag.size,
                     )
                 )
-                bag_actions[bag_idx] = np.expand_dims(np.array(
-                    random.sample(
-                        self.actions[episode_idxes[bag_idx], : transition_starts[bag_idx]]
-                        .squeeze()
-                        .tolist(),
-                        k=sample_bag.size
-                    )
-                ), axis=1)
+                bag_actions[bag_idx] = np.expand_dims(
+                    np.array(
+                        random.sample(
+                            self.actions[
+                                episode_idxes[bag_idx], : transition_starts[bag_idx]
+                            ]
+                            .squeeze()
+                            .tolist(),
+                            k=sample_bag.size,
+                        )
+                    ),
+                    axis=1,
+                )
         return (
             self.obss[episode_idxes, transitions],
             self.actions[episode_idxes, transitions],
@@ -255,5 +260,5 @@ class ReplayBuffer:
             self.dones[episode_idxes, transitions],
             self.episode_lengths[episode_idxes],
             bag_obss,
-            bag_actions
+            bag_actions,
         )

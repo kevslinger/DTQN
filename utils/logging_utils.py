@@ -125,7 +125,7 @@ def get_logger(policy_path: str, args, wandb_kwargs):
                 "a_embed",
                 "in_embed",
                 "context",
-                "eval_context",
+                # "eval_context",
                 "bag_size",
                 # "eval_bag_size",
                 # "gate",
