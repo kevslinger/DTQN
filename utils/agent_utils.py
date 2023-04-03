@@ -1,3 +1,8 @@
+from typing import Tuple
+import gym
+import torch
+import numpy as np
+
 from dtqn.agents.dqn import DqnAgent
 from dtqn.agents.adrqn import AdrqnAgent
 from dtqn.agents.drqn import DrqnAgent
@@ -9,9 +14,6 @@ from dtqn.networks.dqn import DQN
 from dtqn.networks.dtqn import DTQN
 from dtqn.networks.dtqn_bag import DTQNBag
 from utils import env_processing
-import gym
-import torch
-import numpy as np
 
 
 MODEL_MAP = {
@@ -35,7 +37,7 @@ AGENT_MAP = {
 
 def get_agent(
     model_str: str,
-    env: gym.Env,
+    envs: Tuple[gym.Env],
     embed_per_obs_dim: int,
     action_dim: int,
     inner_embed: int,
@@ -58,16 +60,17 @@ def get_agent(
     bag_size: int = 0,
     eval_bag_size: int = 0,
 ):
-    env_obs_length = env_processing.get_env_obs_length(env)
-    env_obs_mask = env_processing.get_env_obs_mask(env)
+    # All envs must have the same observation shape
+    env_obs_length = env_processing.get_env_obs_length(envs[0])
+    env_obs_mask = env_processing.get_env_obs_mask(envs[0])
     if max_env_steps <= 0:
-        max_env_steps = env_processing.get_env_max_steps(env)
+        max_env_steps = max([env_processing.get_env_max_steps(env) for env in envs])
     if isinstance(env_obs_mask, np.ndarray):
         obs_vocab_size = env_obs_mask.max() + 1
     else:
         obs_vocab_size = env_obs_mask + 1
     is_discrete_env = isinstance(
-        env.observation_space,
+        envs[0].observation_space,
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
 
@@ -77,7 +80,7 @@ def get_agent(
     def make_model(network_cls):
         return lambda: network_cls(
             env_obs_length,
-            env.action_space.n,
+            envs[0].action_space.n,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -89,7 +92,7 @@ def get_agent(
     def make_dtqn(network_cls):
         return lambda: network_cls(
             env_obs_length,
-            env.action_space.n,
+            envs[0].action_space.n,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -117,8 +120,8 @@ def get_agent(
         device,
         env_obs_length,
         max_env_steps,
-        env_processing.get_env_obs_mask(env),
-        env.action_space.n,
+        env_obs_mask,
+        envs[0].action_space.n,
         is_discrete_env,
         learning_rate=learning_rate,
         batch_size=batch_size,

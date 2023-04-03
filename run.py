@@ -1,7 +1,7 @@
 import os
 import argparse
 from time import time, sleep
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import wandb
@@ -40,7 +40,11 @@ def get_args():
         help="Network model to use.",
     )
     parser.add_argument(
-        "--env", type=str, default="DiscreteCarFlag-v0", help="Domain to use."
+        "--envs",
+        type=str,
+        nargs="+",
+        default="DiscreteCarFlag-v0",
+        help="Domain to use. You can supply multiple domains, but they must have the same observation and action space.",
     )
     parser.add_argument(
         "--num-steps",
@@ -67,7 +71,7 @@ def get_args():
     parser.add_argument(
         "--eval-frequency",
         type=int,
-        default=1_000,
+        default=5_000,
         help="How many timesteps between agent evaluations.",
     )
     parser.add_argument(
@@ -249,8 +253,8 @@ def evaluate(
 
 def train(
     agent,
-    env: Env,
-    eval_env: Env,
+    envs: Tuple[Env],
+    eval_envs: Tuple[Env],
     total_steps: int,
     eps,
     eval_frequency: int,
@@ -271,21 +275,23 @@ def train(
     start_time = time()
     # Turn on train mode
     agent.eval_off()
+    env = RNG.rng.choice(envs)
     agent.context_reset(env.reset())
 
     for timestep in range(agent.num_train_steps, total_steps):
-        step(agent, env, eps)
+        done = step(agent, env, eps)
 
+        if done:
+            agent.replay_buffer.flush()
+            env = RNG.rng.choice(envs)
+            agent.context_reset(env.reset())
         agent.train()
         eps.anneal()
 
-        if timestep % eval_frequency == 0:
-            sr, ret, length = evaluate(agent, eval_env, eval_episodes)
 
+        if timestep % eval_frequency == 0:
             hours = (time() - start_time) / 3600
-            mean_success_rate.add(sr)
-            mean_reward.add(ret)
-            mean_episode_length.add(length)
+            # Log training values
             log_vals = {
                 "losses/TD_Error": agent.td_errors.mean(),
                 "losses/Grad_Norm": agent.grad_norms.mean(),
@@ -295,14 +301,28 @@ def train(
                 "losses/Max_Target_Value": agent.target_max.mean(),
                 "losses/Mean_Target_Value": agent.target_mean.mean(),
                 "losses/Min_Target_Value": agent.target_min.mean(),
-                "results/Success_Rate": sr,
-                "results/Mean_Success_Rate": mean_success_rate.mean(),
-                "results/Return": ret,
-                "results/Mean_Return": mean_reward.mean(),
-                "results/Episode_Length": length,
-                "results/Mean_Episode_Length": mean_episode_length.mean(),
-                "results/Hours": hours,
+                "results/hours": hours,
             }
+
+            for idx, eval_env in enumerate(eval_envs):
+                sr, ret, length = evaluate(agent, eval_env, eval_episodes)
+
+                log_vals.update({
+                    f"results/env{idx}SuccessRate": sr,
+                    f"results/env{idx}Return": ret,
+                    f"results/env{idx}EpisodeLength": length
+                })
+            # mean_success_rate.add(sr)
+            # mean_reward.add(ret)
+            # mean_episode_length.add(length)
+            
+                # "results/Success_Rate": sr,
+                # "results/Mean_Success_Rate": mean_success_rate.mean(),
+                # "results/Return": ret,
+                # "results/Mean_Return": mean_reward.mean(),
+                # "results/Episode_Length": length,
+                # "results/Mean_Episode_Length": mean_episode_length.mean(),
+
             if asymmetric:
                 asym_sr, asym_ret, asym_length = evaluate(
                     agent, eval_env, eval_episodes, asymmetric=True
@@ -326,7 +346,7 @@ def train(
 
             if verbose:
                 print(
-                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {((time() - start_time) / 3600):.2f}"
+                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {hours:.2f}"
                 )
 
         if save_policy and timestep % 50_000 == 0:
@@ -351,7 +371,7 @@ def train(
             return
 
 
-def step(agent, env, eps):
+def step(agent, env, eps: float):
     action = agent.get_action(epsilon=eps.val)
     next_obs, reward, done, info = env.step(action)
 
@@ -362,15 +382,13 @@ def step(agent, env, eps):
         buffer_done = done
 
     agent.observe(next_obs, action, reward, buffer_done)
-
-    if done:
-        agent.replay_buffer.flush()
-        agent.context_reset(env.reset())
+    return done
 
 
-def prepopulate(agent, prepop_steps: int, env: Env):
+def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]):
     timestep = 0
     while timestep < prepop_steps:
+        env = RNG.rng.choice(envs)
         agent.context_reset(env.reset())
         done = False
         while not done:
@@ -391,16 +409,19 @@ def prepopulate(agent, prepop_steps: int, env: Env):
 def run_experiment(args):
     start_time = time()
     # Create envs, set seed, create RL agent
-    env = env_processing.make_env(args.env)
-    eval_env = env_processing.make_env(args.env)
+    envs = []
+    eval_envs = []
+    for env_str in args.envs:
+        envs.append(env_processing.make_env(env_str))
+        eval_envs.append(env_processing.make_env(env_str))
     device = torch.device(args.device)
-    set_global_seed(args.seed, env, eval_env)
+    set_global_seed(args.seed, *(envs + eval_envs))
 
     eps = epsilon_anneal.LinearAnneal(1.0, 0.1, args.num_steps // 10)
 
     agent = get_agent(
         args.model,
-        env,
+        envs,
         args.obs_embed,
         args.a_embed,
         args.in_embed,
@@ -430,11 +451,11 @@ def run_experiment(args):
     )
 
     # Create logging dir
-    policy_save_dir = os.path.join(os.getcwd(), "policies", args.project_name, args.env)
+    policy_save_dir = os.path.join(os.getcwd(), "policies", args.project_name, *args.envs)
     os.makedirs(policy_save_dir, exist_ok=True)
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_env={args.env}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
+        f"model={args.model}_envs={','.join(args.envs)}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
         f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_eval_bag={args.eval_bag_size}_seed={args.seed}",
     )
 
@@ -443,7 +464,7 @@ def run_experiment(args):
         agent.policy_network.load_state_dict(
             torch.load(policy_path, map_location="cpu")
         )
-        evaluate(agent, env, 1_000_000, render=True)
+        evaluate(agent, eval_envs[0], 1_000_000, render=True)
 
     # If there is already a saved checkpoint, load it and resume training if more steps are needed
     # Or exit early if we have already finished training.
@@ -474,7 +495,7 @@ def run_experiment(args):
     else:
         wandb_kwargs = {"resume": None}
         # Prepopulate the replay buffer
-        prepopulate(agent, 50_000, env)
+        prepopulate(agent, 50_000, envs)
         mean_success_rate = RunningAverage(10)
         mean_reward = RunningAverage(10)
         mean_episode_length = RunningAverage(10)
@@ -491,8 +512,8 @@ def run_experiment(args):
 
     train(
         agent,
-        env,
-        eval_env,
+        envs,
+        eval_envs,
         args.num_steps,
         eps,
         args.eval_frequency,
