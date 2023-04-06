@@ -11,7 +11,7 @@ import joblib
 
 from dtqn.buffers.replay_buffer import ReplayBuffer
 from utils.logging_utils import RunningAverage
-from utils.env_processing import Context
+from utils.context import Context
 from utils.epsilon_anneal import LinearAnneal
 from utils.random import RNG
 

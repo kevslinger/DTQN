@@ -38,6 +38,7 @@ def wandb_init(config, group_keys, **kwargs) -> None:
     )
 
 
+# TODO: Update for multiple envs and/or asymmetric evaluation
 class CSVLogger:
     """Logger to write results to a CSV. The log function matches that of Weights and Biases.
 
@@ -125,13 +126,14 @@ def get_logger(policy_path: str, args, wandb_kwargs):
                 "a_embed",
                 "in_embed",
                 "context",
+                "layers",
                 # "eval_context",
                 "bag_size",
                 # "eval_bag_size",
                 # "gate",
                 # "identity",
                 "history",
-                # "pos",
+                "pos",
             ],
             **wandb_kwargs,
         )

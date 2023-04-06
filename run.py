@@ -66,19 +66,19 @@ def get_args():
         "--buf-size",
         type=int,
         default=500_000,
-        help="Number of timesteps to store in replay buffer.",
+        help="Number of timesteps to store in replay buffer. Note that we store the max length episodes given by the environment, so episodes that take longer will be padded at the end. This does not affect training but may affect the number of real observations in the buffer.",
     )
     parser.add_argument(
         "--eval-frequency",
         type=int,
         default=5_000,
-        help="How many timesteps between agent evaluations.",
+        help="How many training timesteps between agent evaluations.",
     )
     parser.add_argument(
         "--eval-episodes",
         type=int,
         default=10,
-        help="Number of episodes for each evaluation.",
+        help="Number of episodes for each evaluation period.",
     )
     parser.add_argument(
         "--device", type=str, default="cuda", help="Pytorch device to use."
@@ -99,7 +99,7 @@ def get_args():
         "--a-embed",
         type=int,
         default=0,
-        help="The number of features to give each action.",
+        help="The number of features to give each action. A value of 0 will prevent the policy from using the previous action.",
     )
     parser.add_argument(
         "--in-embed",
@@ -165,8 +165,8 @@ def get_args():
     )
     parser.add_argument(
         "--pos",
-        default=1,
-        choices=[1, "1", 0, "0", "sin"],
+        default="learned",
+        choices=["learned", "sin", "none"],
         help="The type of positional encodings to use.",
     )
     parser.add_argument(
@@ -207,7 +207,20 @@ def evaluate(
     asymmetric: bool = False,
     render: Optional[bool] = None,
 ):
-    """Evaluate the network for n_episodes"""
+    """Evaluate the network for n_episodes using a greedy policy.
+
+    Arguments:
+        agent:          the agent to evaluate.
+        eval_env:       gym.Env, the environment to use for the evaluation.
+        eval_episodes:  int, the number of episodes to run.
+        asymmetric:     bool, whether or not to use asymmetric evaluation.
+        render:         bool, whether or not to render the timesteps for enjoy mode.
+
+    Returns:
+        mean_success:           float, number of successes divided by number of episodes.
+        mean_return:            float, the average return per episode.
+        mean_episode_length:    float, the average episode length.
+    """
     # Set networks to eval mode (turns off dropout, etc.)
     if asymmetric:
         agent.eval_on_asym()
@@ -255,8 +268,9 @@ def train(
     agent,
     envs: Tuple[Env],
     eval_envs: Tuple[Env],
+    env_strs: Tuple[str],
     total_steps: int,
-    eps,
+    eps: epsilon_anneal.EpsilonAnneal,
     eval_frequency: int,
     eval_episodes: int,
     policy_path: str,
@@ -266,15 +280,39 @@ def train(
     mean_episode_length: RunningAverage,
     mean_reward: RunningAverage,
     asym_success_rate: RunningAverage,
-    asym_reward: RunningAverage,
     asym_episode_length: RunningAverage,
+    asym_reward: RunningAverage,
     time_remaining: Optional[int],
     asymmetric: bool,
     verbose: bool = False,
-):
+) -> None:
+    """Train the agent.
+
+    Arguments:
+        agent:              the agent to train.
+        envs:               Tuple[gym.Env], the list of envs to train on.
+        eval_envs:          Tuple[gym.Env], the list of envs to evaluate with.
+        env_strs:           Tuple[str], the list of environment names.
+        total_steps:        int, the total number of timesteps to train.
+        eps:                EpsilonAnneal, the schedule to set for epsilon throughout training.
+        eval_frequency:     int, the number of training steps between evaluation periods.
+        eval_episodes:      int, the number of episodes to evaluate on for each eval period.
+        policy_path:        str, the path to store the policy and checkpoints at.
+        logger:             the logger to use (either wandb or csv).
+        mean_success_rate:  RunningAverage, the success rate over several evaluation periods.
+        mean_episode_length:RunningAverage, the episode length over several evaluation periods.
+        mean_reward:        RunningAverage, the episodic return over several evaluation periods.
+        asym_success_rate:  RunningAverage, the mean success rate during asymmetric evaluation.
+        asym_episode_length:RunningAverage, the mean episode length during asymmetric evaluation.
+        asym_reward:        RunningAverage, the mean episodic return during asymmetric evaluation.
+        time_remaining:     int, if using time limits, the amount of time left since starting the job.
+        asymmetric:         bool, whether or not we are using asymmetric evaluation.
+        verbose:            bool, whether or not to print updates to standard out.
+    """
     start_time = time()
     # Turn on train mode
     agent.eval_off()
+    # Choose an environment at the start and on every episode reset.
     env = RNG.rng.choice(envs)
     agent.context_reset(env.reset())
 
@@ -288,7 +326,6 @@ def train(
         agent.train()
         eps.anneal()
 
-
         if timestep % eval_frequency == 0:
             hours = (time() - start_time) / 3600
             # Log training values
@@ -301,27 +338,29 @@ def train(
                 "losses/Max_Target_Value": agent.target_max.mean(),
                 "losses/Mean_Target_Value": agent.target_mean.mean(),
                 "losses/Min_Target_Value": agent.target_min.mean(),
-                "results/hours": hours,
+                "losses/hours": hours,
             }
-
-            for idx, eval_env in enumerate(eval_envs):
+            # Perform an evaluation for each of the eval environments and add to our log
+            for env_str, eval_env in zip(env_strs, eval_envs):
                 sr, ret, length = evaluate(agent, eval_env, eval_episodes)
 
-                log_vals.update({
-                    f"results/env{idx}SuccessRate": sr,
-                    f"results/env{idx}Return": ret,
-                    f"results/env{idx}EpisodeLength": length
-                })
+                log_vals.update(
+                    {
+                        f"{env_str}/SuccessRate": sr,
+                        f"{env_str}/Return": ret,
+                        f"{env_str}/EpisodeLength": length,
+                    }
+                )
             # mean_success_rate.add(sr)
             # mean_reward.add(ret)
             # mean_episode_length.add(length)
-            
-                # "results/Success_Rate": sr,
-                # "results/Mean_Success_Rate": mean_success_rate.mean(),
-                # "results/Return": ret,
-                # "results/Mean_Return": mean_reward.mean(),
-                # "results/Episode_Length": length,
-                # "results/Mean_Episode_Length": mean_episode_length.mean(),
+
+            # "results/Success_Rate": sr,
+            # "results/Mean_Success_Rate": mean_success_rate.mean(),
+            # "results/Return": ret,
+            # "results/Mean_Return": mean_reward.mean(),
+            # "results/Episode_Length": length,
+            # "results/Mean_Episode_Length": mean_episode_length.mean(),
 
             if asymmetric:
                 asym_sr, asym_ret, asym_length = evaluate(
@@ -338,7 +377,7 @@ def train(
                         "results/Asym_Episode_Length": asym_episode_length.mean(),
                     }
                 )
-
+            # Commit the log values.
             logger.log(
                 log_vals,
                 step=timestep,
@@ -346,7 +385,7 @@ def train(
 
             if verbose:
                 print(
-                    f"[ {timestamp()} ] Training Steps: {timestep}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {hours:.2f}"
+                    f"[ {timestamp()} ] Training Steps: {timestep}, Env: {env_str}, Success Rate: {sr:.2f}, Return: {ret:.2f}, Episode Length: {length:.2f}, Hours: {hours:.2f}"
                 )
 
         if save_policy and timestep % 50_000 == 0:
@@ -371,7 +410,17 @@ def train(
             return
 
 
-def step(agent, env, eps: float):
+def step(agent, env: Env, eps: float) -> bool:
+    """Use the agent's policy to get the next action, take it, and then record the result.
+
+    Arguments:
+        agent:  the agent to use.
+        env:    gym.Env
+        eps:    the epsilon value (for epsilon-greedy policy)
+
+    Returns:
+        done: bool, whether or not the episode has finished.
+    """
     action = agent.get_action(epsilon=eps.val)
     next_obs, reward, done, info = env.step(action)
 
@@ -385,7 +434,14 @@ def step(agent, env, eps: float):
     return done
 
 
-def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]):
+def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]) -> None:
+    """Prepopulate the replay buffer. Sample an enviroment on each episode.
+
+    Arguments:
+        agent:          the agent whose buffer needs to be stored.
+        prepop_steps:   int, the number of timesteps to populate.
+        envs:           Tuple[gym.Env], the list of environments to use for sampling.
+    """
     timestep = 0
     while timestep < prepop_steps:
         env = RNG.rng.choice(envs)
@@ -407,6 +463,7 @@ def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]):
 
 
 def run_experiment(args):
+    """Uses the command-line arguments to create the agent and associated tools, then begin training."""
     start_time = time()
     # Create envs, set seed, create RL agent
     envs = []
@@ -451,7 +508,9 @@ def run_experiment(args):
     )
 
     # Create logging dir
-    policy_save_dir = os.path.join(os.getcwd(), "policies", args.project_name, *args.envs)
+    policy_save_dir = os.path.join(
+        os.getcwd(), "policies", args.project_name, *args.envs
+    )
     os.makedirs(policy_save_dir, exist_ok=True)
     policy_path = os.path.join(
         policy_save_dir,
@@ -514,6 +573,7 @@ def run_experiment(args):
         agent,
         envs,
         eval_envs,
+        args.envs,
         args.num_steps,
         eps,
         args.eval_frequency,

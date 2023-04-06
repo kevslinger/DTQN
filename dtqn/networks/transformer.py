@@ -7,12 +7,12 @@ class TransformerLayer(nn.Module):
     """Create a single transformer block. DTQN may stack multiple blocks.
 
     Args:
-        num_heads: Number of heads to use for MultiHeadAttention.
+        num_heads:  Number of heads to use for MultiHeadAttention.
         embed_size: The dimensionality of the layer.
-        history_len: The maximum number of observations to take in.
-        dropout: Dropout percentage.
-        attn_gate: The combine layer after the attention submodule.
-        mlpt_gate: The combine layer after the feedforward submodule.
+        history_len:The maximum number of observations to take in.
+        dropout:    Dropout percentage.
+        attn_gate:  The combine layer after the attention submodule.
+        mlp_gate:  The combine layer after the feedforward submodule.
     """
 
     def __init__(

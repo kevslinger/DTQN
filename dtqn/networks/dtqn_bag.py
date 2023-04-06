@@ -6,44 +6,34 @@ from dtqn.networks.representations import (
     ObservationEmbeddingRepresentation,
     ActionEmbeddingRepresentation,
 )
+from dtqn.networks.position_encodings import PosEnum, PositionEncoding
 from dtqn.networks.gates import GRUGate, ResGate
 from dtqn.networks.transformer import TransformerLayer, TransformerIdentityLayer
-
-
-# This function taken from the torch transformer tutorial
-# https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-def sinusoidal_pos(
-    context_len: int,
-    embed_dim: int,
-):
-    position = torch.arange(context_len).unsqueeze(1)
-    div_term = torch.exp(torch.arange(0, embed_dim, 2) * (-np.log(10000.0) / embed_dim))
-    pos_encoding = torch.zeros(1, context_len, embed_dim)
-    pos_encoding[0, :, 0::2] = torch.sin(position * div_term)
-    pos_encoding[0, :, 1::2] = torch.cos(position * div_term)
-    return pos_encoding
+from utils import torch_utils
 
 
 class DTQNBag(nn.Module):
     """Deep Transformer Q-Network for partially observable reinforcement learning.
 
     Args:
-        obs_dim: The length of the observation vector.
-        num_actions: The number of possible environments actions.
-        embed_per_obs_dim: Used for discrete observation space. Length of the embed for each
+        obs_dim:            The length of the observation vector.
+        num_actions:        The number of possible environments actions.
+        embed_per_obs_dim:  Used for discrete observation space. Length of the embed for each
             element in the observation dimension.
-        inner_embed_size: The dimensionality of the network. Referred to as d_k by the
+        action_dim:         The number of features to give the action.
+        inner_embed_size:   The dimensionality of the network. Referred to as d_k by the
             original transformer.
-        num_heads: The number of heads to use in the MultiHeadAttention.
-        history_len: The maximum number of observations to take in.
-        dropout: Dropout percentage. Default: `0.0`
-        gate: Which layer to use after the attention and feedforward submodules (choices: `res`
+        num_heads:          The number of heads to use in the MultiHeadAttention.
+        num_layers:         The number of transformer blocks to use.
+        history_len:        The maximum number of observations to take in.
+        dropout:            Dropout percentage. Default: `0.0`
+        gate:               Which layer to use after the attention and feedforward submodules (choices: `res`
             or `gru`). Default: `res`
-        identity: Whether or not to use identity map reordering. Default: `False`
-        pos: The kind of position encodings to use. `0` uses no position encodings, `1` uses
+        identity:           Whether or not to use identity map reordering. Default: `False`
+        pos:                The kind of position encodings to use. `0` uses no position encodings, `1` uses
             learned position encodings, and `sin` uses sinusoidal encodings. Default: `1`
-        discrete: Whether or not the environment has discrete observations. Default: `False`
-        vocab_sizes: If discrete env only. Represents the number of observations in the
+        discrete:           Whether or not the environment has discrete observations. Default: `False`
+        vocab_sizes:        If discrete env only. Represents the number of observations in the
             environment. If the environment has multiple obs dims with different number
             of observations in each dim, this can be supplied as a vector. Default: `None`
     """
@@ -102,22 +92,14 @@ class DTQNBag(nn.Module):
                 )
             )
 
-        # If pos is 0, the positional embeddings are just 0s. Otherwise, they become learnables that initialise as 0s
-        try:
-            pos = int(pos)
-        except ValueError:
-            if pos == "sin":
-                self.position_embedding = nn.Parameter(
-                    sinusoidal_pos(context_len=history_len, embed_dim=inner_embed_size),
-                    requires_grad=False,
-                )
-            else:
-                raise AssertionError(f"pos must be either int or sin but was {pos}")
-        else:
-            self.position_embedding = nn.Parameter(
-                torch.zeros(1, history_len, inner_embed_size),
-                requires_grad=pos != 0,
-            )
+        pos_function_map = {
+            PosEnum.LEARNED: PositionEncoding.make_learned_position_encoding,
+            PosEnum.SIN: PositionEncoding.make_sinusoidal_position_encoding,
+            PosEnum.NONE: PositionEncoding.make_empty_position_encoding,
+        }
+        self.position_embedding = pos_function_map[PosEnum(pos)](
+            context_len=history_len, embed_dim=inner_embed_size
+        )
 
         self.dropout = nn.Dropout(dropout)
 
@@ -165,26 +147,7 @@ class DTQNBag(nn.Module):
         )
 
         self.history_len = history_len
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.MultiheadAttention):
-            if module.in_proj_weight is None:
-                module.q_proj_weight.data.normal_(mean=0.0, std=0.02)
-                module.k_proj_weight.data.normal_(mean=0.0, std=0.02)
-                module.v_proj_weight.data.normal_(mean=0.0, std=0.02)
-            else:
-                module.in_proj_weight.data.normal_(mean=0.0, std=0.02)
-            module.in_proj_bias.data.zero_()
-            module.out_proj.weight.data.normal_(mean=0.0, std=0.02)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        self.apply(torch_utils.init_weights)
 
     def forward(
         self,
@@ -224,7 +187,9 @@ class DTQNBag(nn.Module):
             token_embeddings = torch.concat([action_embed, token_embeddings], dim=-1)
         # [batch x seq_len x model_embed] -> [batch x seq_len x model_embed]
         working_memory = self.transformer_layers(
-            self.dropout(token_embeddings + self.position_embedding[:, :history_len, :])
+            self.dropout(
+                token_embeddings + self.position_embedding()[:, :history_len, :]
+            )
         )
         # [batch x bag_size x action_embed] + [batch x bag_size x obs_embed] -> [batch x bag_size x model_embed]
         bag_embeddings = torch.concat(
@@ -235,5 +200,4 @@ class DTQNBag(nn.Module):
             working_memory, bag_embeddings, bag_embeddings
         )
 
-        # print(f"Size of working memory: {working_memory.size()}\nSize of persistent memory: {persistent_memory.size()}")
         return self.ffn(torch.concat([working_memory, persistent_memory], dim=-1))

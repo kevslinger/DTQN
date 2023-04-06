@@ -56,10 +56,40 @@ def get_agent(
     dropout: float = 0.0,
     identity: bool = False,
     gate: str = "res",
-    pos: int = 1,
+    pos: str = "learned",
     bag_size: int = 0,
     eval_bag_size: int = 0,
 ):
+    """Function to create the agent. This will also set up the policy and target networks that the agent needs.
+    Arguments:
+        model_str: str, the name of the Q-function model we are going to use.
+        envs: Tuple[gym.Env], a list of gym environments the agent will train and evaluate on. They must all have the same observation and action space.
+        ember_per_obs_dim: int, the number of features to give each dimension of the observation. This is only used for discrete domains.
+        action_dim: int, the number of features to give each action.
+        inner_embed: int, the size of the main transformer model.
+        buffer_size: int, the number of transitions to store in the replay buffer.
+        device: torch.device, the device to use for training.
+        learning_rate: float, the learning rate for the ADAM optimiser.
+        batch_size: int, the batch size to use for training.
+        context_len: int, the maximum sequence length to use as input to the network.
+        eval_context_len: int, during asymmetric evaluation, this is the context length used for evaluation.
+        max_env_steps: int, the maximum number of steps allowed in the environment before timeout. This will be inferred if not explicitly supplied.
+        history: bool, whether or not to use intermediate Q-value prediction.
+        target_update_frequency: int, the number of training steps between (hard) target network update.
+        gamma: float, the discount factor.
+        -DTQN-Specific-
+        num_heads: int, the number of heads to use in the MultiHeadAttention.
+        num_layers: int, the number of transformer blocks to use.
+        dropout: float, the dropout percentage to use.
+        identity: bool, whether or not to use identity map reordering.
+        gate: str, which combine step to use (residual skip connection or GRU)
+        pos: str, which type of position encoding to use ("learned", "sin", or "none")
+        bag_size: int, the size of the persistent memory bag
+        eval_bag_size: int, during asymmetric evaluation, the bag size to use during evaluation.
+
+    Returns:
+        the agent we created with all those arguments, complete with replay buffer, context, policy and target network.
+    """
     # All envs must have the same observation shape
     env_obs_length = env_processing.get_env_obs_length(envs[0])
     env_obs_mask = env_processing.get_env_obs_mask(envs[0])
@@ -73,14 +103,17 @@ def get_agent(
         envs[0].observation_space,
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
+    # All envs must share same action space
+    num_actions = envs[0].action_space.n
 
     if model_str == "DQN":
         context_len = 1
 
     def make_model(network_cls):
+        """Creates the non-transformer models: DQN, DRQN, ADRQN, ..."""
         return lambda: network_cls(
             env_obs_length,
-            envs[0].action_space.n,
+            num_actions,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -90,9 +123,10 @@ def get_agent(
         ).to(device)
 
     def make_dtqn(network_cls):
+        """Creates DTQN"""
         return lambda: network_cls(
             env_obs_length,
-            envs[0].action_space.n,
+            num_actions,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -121,7 +155,7 @@ def get_agent(
         env_obs_length,
         max_env_steps,
         env_obs_mask,
-        envs[0].action_space.n,
+        num_actions,
         is_discrete_env,
         learning_rate=learning_rate,
         batch_size=batch_size,

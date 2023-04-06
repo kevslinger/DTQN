@@ -1,4 +1,13 @@
-class Constant:
+from abc import ABC, abstractmethod
+
+
+class EpsilonAnneal(ABC):
+    @abstractmethod
+    def anneal(self):
+        pass
+
+
+class Constant(EpsilonAnneal):
     def __init__(self, start):
         self.val = start
 
@@ -6,13 +15,13 @@ class Constant:
         pass
 
 
-class LinearAnneal:
+class LinearAnneal(EpsilonAnneal):
     """Linear Annealing Schedule.
 
     Args:
-        start: The initial value of epsilon.
-        end: The final value of epsilon.
-        duration: The number of anneals from start value to end value.
+        start:      The initial value of epsilon.
+        end:        The final value of epsilon.
+        duration:   The number of anneals from start value to end value.
 
     """
 

@@ -1,6 +1,6 @@
 import torch
 from dtqn.agents.drqn import DrqnAgent
-from utils.env_processing import Context
+from utils.context import Context
 
 
 class AdrqnAgent(DrqnAgent):

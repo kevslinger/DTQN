@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch
 from typing import Optional
 from dtqn.networks.representations import ObservationEmbeddingRepresentation
+from utils import torch_utils
 
 
 class DQN(nn.Module):
@@ -47,14 +48,7 @@ class DQN(nn.Module):
             nn.ReLU(),
             nn.Linear(inner_embed_size, num_actions),
         )
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
+        self.apply(torch_utils.init_weights)
 
     def forward(self, x: torch.tensor):
         return self.ffn(self.obs_embed(x))

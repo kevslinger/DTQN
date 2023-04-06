@@ -2,7 +2,7 @@ import numpy as np
 import random
 from typing import Optional, Tuple, Union
 
-from utils.env_processing import Bag
+from utils.bag import Bag
 
 
 class ReplayBuffer:

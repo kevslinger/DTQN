@@ -30,11 +30,11 @@ class ObservationEmbeddingRepresentation(nn.Module):
         For use in discrete observation environments.
 
         Args:
-            vocab_sizes: The number of different values your observation could include.
-            obs_dim: The length of the observation vector (assuming 1d).
-            embed_per_obs_dim: The number of features you want to give to each observation
+            vocab_sizes:        The number of different values your observation could include.
+            obs_dim:            The length of the observation vector (assuming 1d).
+            embed_per_obs_dim:  The number of features you want to give to each observation
                 dimension.
-            embed_size: The length of the resulting embedding vector.
+            embed_size:         The length of the resulting embedding vector.
         """
 
         assert (
@@ -68,7 +68,7 @@ class ObservationEmbeddingRepresentation(nn.Module):
             specified dimensionality for use in the network.
 
         Args:
-            obs_dim: the length of the observation vector (assuming 1d)
+            obs_dim:    The length of the observation vector (assuming 1d)
             embed_size: The length of the resulting embedding vector
         """
         embedding = nn.Linear(obs_dim, outer_embed_size)
@@ -80,8 +80,8 @@ class ObservationEmbeddingRepresentation(nn.Module):
         For use in image observatino environments.
 
         Args:
-            obs_dim: The image observation's dimensions (C x H x W).
-            outer_embed_size: The length of the resulting embedding vector.
+            obs_dim:            The image observation's dimensions (C x H x W).
+            outer_embed_size:   The length of the resulting embedding vector.
         """
         # C x H x W or H x W
         if len(obs_dim) == 3:

@@ -6,6 +6,7 @@ from dtqn.networks.representations import (
     ObservationEmbeddingRepresentation,
     ActionEmbeddingRepresentation,
 )
+from utils import torch_utils
 
 
 class ADRQN(nn.Module):
@@ -56,20 +57,7 @@ class ADRQN(nn.Module):
             nn.Linear(inner_embed_size, num_actions),
         )
 
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, nn.LSTM):
-            module.weight_hh_l0.data.normal_(mean=0.0, std=0.02)
-            module.weight_ih_l0.data.normal_(mean=0.0, std=0.02)
-            if module.bias is not None:
-                module.bias_hh_l0.data.zero_()
-                module.bias_ih_l0.data.zero_()
+        self.apply(torch_utils.init_weights)
 
     def forward(
         self,

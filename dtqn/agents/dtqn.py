@@ -7,7 +7,8 @@ import torch.nn.functional as F
 
 from dtqn.agents.drqn import DqnAgent
 from dtqn.agents.dqn import TrainMode
-from utils.env_processing import Context, Bag
+from utils.bag import Bag
+from utils.context import Context
 from utils.random import RNG
 
 
@@ -110,15 +111,6 @@ class DtqnAgent(DqnAgent):
             context_obs_tensor, context_action_tensor, bag_obs_tensor, bag_action_tensor
         )
 
-        # q_values = self.policy_network(
-        #     context_obs_tensor,
-        #     context_action_tensor,
-        #     torch.as_tensor(
-        #         self.bag.export(), dtype=self.obs_tensor_type, device=self.device
-        #     ).unsqueeze(0)
-        #     if self.bag.pos > 0
-        #     else None,
-        # )
         # We take the argmax of the last timestep's Q values
         # In other words, select the highest q value action
         return torch.argmax(q_values[:, -1, :]).item()

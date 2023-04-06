@@ -1,0 +1,41 @@
+state_space:
+  objects: [ Wall, Floor, Exit, Beacon ]
+  colors: [ NONE, RED, GREEN, BLUE, YELLOW ]
+
+action_space:
+  - MOVE_FORWARD
+  - MOVE_BACKWARD
+  - MOVE_LEFT
+  - MOVE_RIGHT
+  - TURN_LEFT
+  - TURN_RIGHT
+
+observation_space:
+  objects: [ Wall, Floor, Exit, Beacon ]
+  colors: [ NONE, RED, GREEN, BLUE, YELLOW ]
+
+reset_function:
+  name: memory_rooms
+  shape: [ 9, 9 ]
+  layout: [ 2, 2 ]
+  colors: [ RED, GREEN, BLUE, YELLOW ]
+  num_beacons: 1
+  num_exits: 2
+
+transition_functions:
+  - name: move_agent
+  - name: turn_agent
+
+reward_functions:
+  - name: reach_exit_memory
+    reward_good: 5.0
+    reward_bad: -5.0
+  - name: living_reward
+    reward: -0.05
+
+observation_function:
+  name: partially_occluded
+  area: [ [ -1, 0 ], [-1, 1 ] ]
+
+terminating_function:
+  name: reach_exit

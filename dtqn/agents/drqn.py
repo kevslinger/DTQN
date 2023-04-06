@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from dtqn.agents.dqn import DqnAgent, TrainMode
 from dtqn.buffers.replay_buffer import ReplayBuffer
-from utils.env_processing import Context
+from utils.context import Context
 from utils.random import RNG
 
 

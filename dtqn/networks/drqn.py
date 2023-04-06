@@ -3,6 +3,7 @@ import torch
 import torch.nn.utils.rnn as rnn
 from typing import Optional, Tuple
 from dtqn.networks.dqn import DQN
+from utils import torch_utils
 
 
 class DRQN(DQN):
@@ -31,20 +32,7 @@ class DRQN(DQN):
         self.lstm = nn.LSTM(
             input_size=inner_embed, hidden_size=inner_embed, batch_first=True
         )
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, nn.LSTM):
-            module.weight_hh_l0.data.normal_(mean=0.0, std=0.02)
-            module.weight_ih_l0.data.normal_(mean=0.0, std=0.02)
-            if module.bias is not None:
-                module.bias_hh_l0.data.zero_()
-                module.bias_ih_l0.data.zero_()
+        self.apply(torch_utils.init_weights)
 
     def forward(
         self,

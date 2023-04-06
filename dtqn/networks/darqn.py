@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dtqn.networks.drqn as drqn
+from utils import torch_utils
 
 
 class SoftAttention(nn.Module):
@@ -51,7 +52,7 @@ class DARQN(drqn.DRQN):
             requires_grad=False,
         )
         self.attention = SoftAttention(embed_size=inner_embed)
-        self.apply(self._init_weights)
+        self.apply(torch_utils.init_weights)
 
     def forward(
         self,
