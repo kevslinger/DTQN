@@ -4,7 +4,6 @@ import torch
 import numpy as np
 
 from dtqn.agents.dqn import DqnAgent
-from dtqn.agents.adrqn import AdrqnAgent
 from dtqn.agents.drqn import DrqnAgent
 from dtqn.agents.dtqn import DtqnAgent
 from dtqn.networks.adrqn import ADRQN
@@ -46,7 +45,6 @@ def get_agent(
     learning_rate: float,
     batch_size: int,
     context_len: int,
-    eval_context_len: int,
     max_env_steps: int,
     history: bool,
     target_update_frequency: int,
@@ -58,7 +56,6 @@ def get_agent(
     gate: str = "res",
     pos: str = "learned",
     bag_size: int = 0,
-    eval_bag_size: int = 0,
 ):
     """Function to create the agent. This will also set up the policy and target networks that the agent needs.
     Arguments:
@@ -72,7 +69,6 @@ def get_agent(
         learning_rate: float, the learning rate for the ADAM optimiser.
         batch_size: int, the batch size to use for training.
         context_len: int, the maximum sequence length to use as input to the network.
-        eval_context_len: int, during asymmetric evaluation, this is the context length used for evaluation.
         max_env_steps: int, the maximum number of steps allowed in the environment before timeout. This will be inferred if not explicitly supplied.
         history: bool, whether or not to use intermediate Q-value prediction.
         target_update_frequency: int, the number of training steps between (hard) target network update.
@@ -85,7 +81,6 @@ def get_agent(
         gate: str, which combine step to use (residual skip connection or GRU)
         pos: str, which type of position encoding to use ("learned", "sin", or "none")
         bag_size: int, the size of the persistent memory bag
-        eval_bag_size: int, during asymmetric evaluation, the bag size to use during evaluation.
 
     Returns:
         the agent we created with all those arguments, complete with replay buffer, context, policy and target network.
@@ -161,10 +156,8 @@ def get_agent(
         batch_size=batch_size,
         gamma=gamma,
         context_len=context_len,
-        eval_context_len=eval_context_len,
         embed_size=inner_embed,
         history=history,
         target_update_frequency=target_update_frequency,
         bag_size=bag_size,
-        eval_bag_size=eval_bag_size,
     )

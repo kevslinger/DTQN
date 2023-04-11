@@ -59,7 +59,6 @@ class DARQN(drqn.DRQN):
         x: torch.tensor,
         hidden_states: Optional[tuple] = None,
         episode_lengths: Optional[int] = None,
-        padding_value: Optional[int] = None,
     ):
         x = self.obs_embed(x)
         # We only supply hidden states within an episode

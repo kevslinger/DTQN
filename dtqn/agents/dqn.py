@@ -19,7 +19,6 @@ from utils.random import RNG
 class TrainMode(Enum):
     TRAIN = 1
     EVAL = 2
-    EVAL_ASYM = 3
 
 
 class DqnAgent:
@@ -36,7 +35,6 @@ class DqnAgent:
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 1,
-        eval_context_len: int = 1,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
@@ -93,15 +91,12 @@ class DqnAgent:
         self.num_actions = num_actions
         self.train_mode = TrainMode.TRAIN
         self.obs_mask = obs_mask
-        # TODO: Assymetric stuff
+
         self.train_context = Context(
             context_len, obs_mask, self.num_actions, env_obs_length
         )
         self.eval_context = Context(
             context_len, obs_mask, self.num_actions, env_obs_length
-        )
-        self.asym_eval_context = Context(
-            eval_context_len, obs_mask, self.num_actions, env_obs_length
         )
 
     @property
@@ -110,15 +105,9 @@ class DqnAgent:
             return self.train_context
         elif self.train_mode == TrainMode.EVAL:
             return self.eval_context
-        else:
-            return self.asym_eval_context
 
     def eval_on(self) -> None:
         self.train_mode = TrainMode.EVAL
-        self.policy_network.eval()
-
-    def eval_on_asym(self) -> None:
-        self.train_mode = TrainMode.EVAL_ASYM
         self.policy_network.eval()
 
     def eval_off(self) -> None:
@@ -156,7 +145,7 @@ class DqnAgent:
             return
 
         self.eval_off()
-        obss, actions, rewards, next_obss, dones, _ = self.replay_buffer.sample(
+        obss, actions, rewards, next_obss, _, dones, _ = self.replay_buffer.sample(
             self.batch_size
         )
 
@@ -237,9 +226,6 @@ class DqnAgent:
         episode_successes: RunningAverage,
         episode_rewards: RunningAverage,
         episode_lengths: RunningAverage,
-        asym_successes: RunningAverage,
-        asym_rewards: RunningAverage,
-        asym_lengths: RunningAverage,
         eps: LinearAnneal,
     ) -> None:
         self.save_mini_checkpoint(checkpoint_dir=checkpoint_dir, wandb_id=wandb_id)
@@ -260,9 +246,6 @@ class DqnAgent:
                 "episode_successes": episode_successes,
                 "episode_rewards": episode_rewards,
                 "episode_lengths": episode_lengths,
-                "asym_successes": asym_successes,
-                "asym_rewards": asym_rewards,
-                "asym_lengths": asym_lengths,
                 # Losses
                 "td_errors": self.td_errors,
                 "grad_norms": self.grad_norms,
@@ -332,9 +315,6 @@ class DqnAgent:
         episode_successes = checkpoint["episode_successes"]
         episode_rewards = checkpoint["episode_rewards"]
         episode_lengths = checkpoint["episode_lengths"]
-        asym_successes = checkpoint["asym_successes"]
-        asym_rewards = checkpoint["asym_rewards"]
-        asym_lengths = checkpoint["asym_lengths"]
         # Exploration value
         epsilon = checkpoint["epsilon"]
 
@@ -343,8 +323,5 @@ class DqnAgent:
             episode_successes,
             episode_rewards,
             episode_lengths,
-            asym_successes,
-            asym_rewards,
-            asym_lengths,
             epsilon,
         )

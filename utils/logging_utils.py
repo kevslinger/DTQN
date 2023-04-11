@@ -4,6 +4,7 @@ import os
 from typing import Dict
 from collections import deque
 from datetime import datetime
+import argparse
 
 
 class RunningAverage:
@@ -38,7 +39,6 @@ def wandb_init(config, group_keys, **kwargs) -> None:
     )
 
 
-# TODO: Update for multiple envs and/or asymmetric evaluation
 class CSVLogger:
     """Logger to write results to a CSV. The log function matches that of Weights and Biases.
 
@@ -46,30 +46,28 @@ class CSVLogger:
         path: path for the csv results file
     """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, args: argparse.Namespace):
         self.results_path = path + "_results.csv"
         self.losses_path = path + "_losses.csv"
+        self.envs = args.envs
         # If we have a checkpoint, we don't want to overwrite
         if not os.path.exists(self.results_path):
+            head_row = ["Hours", "Step"]
+            for env in self.envs:
+                head_row += [
+                    f"{env}/SuccessRate",
+                    f"{env}/EpisodeLength",
+                    f"{env}/Return",
+                ]
             with open(self.results_path, "w") as file:
                 writer = csv.writer(file)
-                writer.writerow(
-                    [
-                        "Step",
-                        "Success Rate",
-                        "Return",
-                        "Episode Length",
-                        "Hours",
-                        "Mean Success Rate",
-                        "Mean Return",
-                        "Mean Episode Length",
-                    ]
-                )
+                writer.writerow(head_row)
         if not os.path.exists(self.losses_path):
             with open(self.losses_path, "w") as file:
                 writer = csv.writer(file)
                 writer.writerow(
                     [
+                        "Hours",
                         "Step",
                         "TD Error",
                         "Grad Norm",
@@ -83,24 +81,21 @@ class CSVLogger:
                 )
 
     def log(self, results: Dict[str, str], step: int):
+        results_row = [results["losses/hours"], step]
+        for env in self.envs:
+            results_row += [
+                results[f"{env}/SuccessRate"],
+                results[f"{env}/EpisodeLength"],
+                results[f"{env}/Return"],
+            ]
         with open(self.results_path, "a") as file:
             writer = csv.writer(file)
-            writer.writerow(
-                [
-                    step,
-                    results["results/Success_Rate"],
-                    results["results/Return"],
-                    results["results/Episode_Length"],
-                    results["results/Hours"],
-                    results["results/Mean_Success_Rate"],
-                    results["results/Mean_Return"],
-                    results["results/Mean_Episode_Length"],
-                ]
-            )
+            writer.writerow(results_row)
         with open(self.losses_path, "a") as file:
             writer = csv.writer(file)
             writer.writerow(
                 [
+                    results["losses/hours"],
                     step,
                     results["losses/TD_Error"],
                     results["losses/Grad_Norm"],
@@ -114,9 +109,11 @@ class CSVLogger:
             )
 
 
-def get_logger(policy_path: str, args, wandb_kwargs):
+def get_logger(
+    policy_path: str, args: argparse.Namespace, wandb_kwargs: Dict[str, str]
+):
     if args.disable_wandb:
-        logger = CSVLogger(policy_path)
+        logger = CSVLogger(policy_path, args)
     else:
         wandb_init(
             vars(args),
@@ -127,11 +124,9 @@ def get_logger(policy_path: str, args, wandb_kwargs):
                 "in_embed",
                 "context",
                 "layers",
-                # "eval_context",
                 "bag_size",
-                # "eval_bag_size",
-                # "gate",
-                # "identity",
+                "gate",
+                "identity",
                 "history",
                 "pos",
             ],

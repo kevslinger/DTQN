@@ -27,13 +27,11 @@ class DtqnAgent(DqnAgent):
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 50,
-        eval_context_len: int = 50,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
         history: bool = True,
         bag_size: int = 0,
-        eval_bag_size: int = 10,
         **kwargs,
     ):
         super().__init__(
@@ -48,7 +46,6 @@ class DtqnAgent(DqnAgent):
             learning_rate,
             batch_size,
             context_len,
-            eval_context_len,
             gamma,
             grad_norm_clip,
             target_update_frequency,
@@ -66,12 +63,8 @@ class DtqnAgent(DqnAgent):
             num_actions,
             env_obs_length,
         )
-        self.asym_eval_context = Context(
-            eval_context_len, obs_mask, self.num_actions, env_obs_length
-        )
         self.train_bag = Bag(bag_size, obs_mask, env_obs_length)
         self.eval_bag = Bag(bag_size, obs_mask, env_obs_length)
-        self.asym_eval_bag = Bag(eval_bag_size, obs_mask, env_obs_length)
 
     @property
     def bag(self) -> Bag:
@@ -79,8 +72,6 @@ class DtqnAgent(DqnAgent):
             return self.train_bag
         elif self.train_mode == TrainMode.EVAL:
             return self.eval_bag
-        else:
-            return self.asym_eval_bag
 
     @torch.no_grad()
     def get_action(self, epsilon: float = 0.0) -> int:

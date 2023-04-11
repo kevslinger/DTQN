@@ -1,5 +1,6 @@
-import numpy as np
 from typing import Tuple, Union
+import numpy as np
+import torch
 
 from utils.random import RNG
 
@@ -21,7 +22,7 @@ class Context:
         obs_mask: int,
         num_actions: int,
         env_obs_length: int,
-        init_hidden=None,
+        init_hidden: Tuple[torch.Tensor] = None,
     ):
         self.max_length = context_length
         self.env_obs_length = env_obs_length
@@ -93,10 +94,6 @@ class Context:
     def roll(self, arr: np.ndarray) -> np.ndarray:
         """Utility function to help with insertions at the end of the array. If the context is full, we replace the first element with the new element, then 'roll' the new element to the end of the array"""
         return np.roll(arr, -1, axis=0) if self.timestep >= self.max_length else arr
-
-    def update_hidden(self, hidden):
-        """Replace the hidden state (for use with RNNs)"""
-        self.hidden = hidden
 
     @property
     def is_full(self) -> bool:

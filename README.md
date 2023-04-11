@@ -104,14 +104,17 @@ Here we provide a mapping from domain name as used in the paper to domain name u
 - Car Flag: `DiscreteCarFlag-v0`
 - Memory Cards: `Memory-5-v0`
 
-If you want to change the environment, use the `--env` flag. 
+If you want to change the environment, use the `--envs` flag.
+You can add multiple `envs` as long as they share the same observation and action space. 
+In that case, the agent will collect data with policy rollouts by randomly sampling one of the provided envs.
+During evaluation, it will evaluate the policy separately on each environment, and record the results for each domain separately.
 To reproduce our results, you may need to change the `inembed` flag as well.
 For `POMDP-hallway-episodic-v0`, `POMDP-heavenhell_3-episodic-v0`, and `DiscreteCarFlag-v0` domains, we used `--inembed 64`.
 For all others tasks, we use `--inembed 128`.
 For instance, to reproduce our Gridverse memory 7x7 experiment, you can use the command:
 
 ```shell
-python run.py --env gv_memory.7x7.yaml --inembed 128
+python run.py --envs gv_memory.7x7.yaml --inembed 128
 ```
 
 Which will run for 2,000,000 timesteps.
@@ -140,7 +143,7 @@ To use both GRU-like gating as well as identity map reordering, use `--gate gru 
 #### Positional Encodings
 To run DTQN with the sinusoidal positional encodings, use `--pos sin`.
 
-To run DTQN without positional encodings, use `--pos 0`.
+To run DTQN without positional encodings, use `--pos none`.
 
 #### Intermediate Q-value prediction
 To run DTQN without intermediate Q-value prediction, use `--history`.

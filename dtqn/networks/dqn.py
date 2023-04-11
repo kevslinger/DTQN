@@ -13,6 +13,7 @@ class DQN(nn.Module):
         obs_dim: int,
         num_actions: int,
         embed_per_obs_dim: int,
+        action_dim: int,
         inner_embed_size: int,
         is_discrete_env: bool,
         obs_vocab_size: Optional[int] = None,

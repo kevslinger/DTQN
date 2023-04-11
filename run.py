@@ -44,7 +44,7 @@ def get_args():
         type=str,
         nargs="+",
         default="DiscreteCarFlag-v0",
-        help="Domain to use. You can supply multiple domains, but they must have the same observation and action space.",
+        help="Domain to use. You can supply multiple domains, but they must have the same observation and action space. With multiple environments, the agent will sample a new one on each episode reset for conducting policy rollouts and collection experience. During evaluation, it will perform the same evaluation for each domain (Note: this may significantly slow down your run! Consider increasing the eval-frequency or reducing the eval-episodes).",
     )
     parser.add_argument(
         "--num-steps",
@@ -172,23 +172,6 @@ def get_args():
     parser.add_argument(
         "--bag-size", type=int, default=0, help="The size of the persistent memory bag."
     )
-    parser.add_argument(
-        "--asymmetric",
-        action="store_true",
-        help="Whether or not to perform asymmetric evaluations",
-    )
-    parser.add_argument(
-        "--eval-bag-size",
-        type=int,
-        default=0,
-        help="If using asymmetric learning, this will be the size of the evaluation bag.",
-    )
-    parser.add_argument(
-        "--eval-context",
-        type=int,
-        default=50,
-        help="If using asymmetric learning, this will be the size of the evaluation context.",
-    )
     # For slurm
     parser.add_argument(
         "--slurm-job-id",
@@ -204,7 +187,6 @@ def evaluate(
     agent,
     eval_env: Env,
     eval_episodes: int,
-    asymmetric: bool = False,
     render: Optional[bool] = None,
 ):
     """Evaluate the network for n_episodes using a greedy policy.
@@ -213,7 +195,6 @@ def evaluate(
         agent:          the agent to evaluate.
         eval_env:       gym.Env, the environment to use for the evaluation.
         eval_episodes:  int, the number of episodes to run.
-        asymmetric:     bool, whether or not to use asymmetric evaluation.
         render:         bool, whether or not to render the timesteps for enjoy mode.
 
     Returns:
@@ -222,10 +203,7 @@ def evaluate(
         mean_episode_length:    float, the average episode length.
     """
     # Set networks to eval mode (turns off dropout, etc.)
-    if asymmetric:
-        agent.eval_on_asym()
-    else:
-        agent.eval_on()
+    agent.eval_on()
 
     total_reward = 0
     num_successes = 0
@@ -279,11 +257,7 @@ def train(
     mean_success_rate: RunningAverage,
     mean_episode_length: RunningAverage,
     mean_reward: RunningAverage,
-    asym_success_rate: RunningAverage,
-    asym_episode_length: RunningAverage,
-    asym_reward: RunningAverage,
     time_remaining: Optional[int],
-    asymmetric: bool,
     verbose: bool = False,
 ) -> None:
     """Train the agent.
@@ -302,11 +276,7 @@ def train(
         mean_success_rate:  RunningAverage, the success rate over several evaluation periods.
         mean_episode_length:RunningAverage, the episode length over several evaluation periods.
         mean_reward:        RunningAverage, the episodic return over several evaluation periods.
-        asym_success_rate:  RunningAverage, the mean success rate during asymmetric evaluation.
-        asym_episode_length:RunningAverage, the mean episode length during asymmetric evaluation.
-        asym_reward:        RunningAverage, the mean episodic return during asymmetric evaluation.
         time_remaining:     int, if using time limits, the amount of time left since starting the job.
-        asymmetric:         bool, whether or not we are using asymmetric evaluation.
         verbose:            bool, whether or not to print updates to standard out.
     """
     start_time = time()
@@ -351,32 +321,7 @@ def train(
                         f"{env_str}/EpisodeLength": length,
                     }
                 )
-            # mean_success_rate.add(sr)
-            # mean_reward.add(ret)
-            # mean_episode_length.add(length)
 
-            # "results/Success_Rate": sr,
-            # "results/Mean_Success_Rate": mean_success_rate.mean(),
-            # "results/Return": ret,
-            # "results/Mean_Return": mean_reward.mean(),
-            # "results/Episode_Length": length,
-            # "results/Mean_Episode_Length": mean_episode_length.mean(),
-
-            if asymmetric:
-                asym_sr, asym_ret, asym_length = evaluate(
-                    agent, eval_env, eval_episodes, asymmetric=True
-                )
-                asym_success_rate.add(asym_sr)
-                asym_reward.add(asym_ret)
-                asym_episode_length.add(asym_length)
-
-                log_vals.update(
-                    {
-                        "results/Asym_Success_Rate": asym_success_rate.mean(),
-                        "results/Asym_Return": asym_reward.mean(),
-                        "results/Asym_Episode_Length": asym_episode_length.mean(),
-                    }
-                )
             # Commit the log values.
             logger.log(
                 log_vals,
@@ -402,9 +347,6 @@ def train(
                 mean_success_rate,
                 mean_reward,
                 mean_episode_length,
-                asym_success_rate,
-                asym_reward,
-                asym_episode_length,
                 eps,
             )
             return
@@ -487,7 +429,6 @@ def run_experiment(args):
         args.lr,
         args.batch,
         args.context,
-        args.eval_context,
         args.max_episode_steps,
         args.history,
         args.tuf,
@@ -500,7 +441,6 @@ def run_experiment(args):
         args.gate,
         args.pos,
         args.bag_size,
-        args.eval_bag_size,
     )
 
     print(
@@ -514,8 +454,8 @@ def run_experiment(args):
     os.makedirs(policy_save_dir, exist_ok=True)
     policy_path = os.path.join(
         policy_save_dir,
-        f"model={args.model}_envs={','.join(args.envs)}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_eval_context={args.eval_context}_heads={args.heads}_layers={args.layers}_"
-        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_eval_bag={args.eval_bag_size}_seed={args.seed}",
+        f"model={args.model}_envs={','.join(args.envs)}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_heads={args.heads}_layers={args.layers}_"
+        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
     )
 
     # Enjoy mode
@@ -543,9 +483,6 @@ def run_experiment(args):
                 mean_success_rate,
                 mean_reward,
                 mean_episode_length,
-                asym_success_rate,
-                asym_reward,
-                asym_episode_length,
                 eps_val,
             ) = agent.load_checkpoint(policy_path)
             eps.val = eps_val
@@ -558,9 +495,6 @@ def run_experiment(args):
         mean_success_rate = RunningAverage(10)
         mean_reward = RunningAverage(10)
         mean_episode_length = RunningAverage(10)
-        asym_success_rate = RunningAverage(10)
-        asym_reward = RunningAverage(10)
-        asym_episode_length = RunningAverage(10)
 
     # Logging setup
     logger = get_logger(policy_path, args, wandb_kwargs)
@@ -584,11 +518,7 @@ def run_experiment(args):
         mean_success_rate,
         mean_reward,
         mean_episode_length,
-        asym_success_rate,
-        asym_reward,
-        asym_episode_length,
         time_remaining,
-        args.asymmetric,
         args.verbose,
     )
 

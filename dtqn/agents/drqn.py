@@ -25,7 +25,6 @@ class DrqnAgent(DqnAgent):
         learning_rate: float = 0.0003,
         batch_size: int = 32,
         context_len: int = 50,
-        eval_context_len: int = 50,
         gamma: float = 0.99,
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
@@ -45,7 +44,6 @@ class DrqnAgent(DqnAgent):
             learning_rate,
             batch_size,
             context_len,
-            eval_context_len,
             gamma,
             grad_norm_clip,
             target_update_frequency,
@@ -63,16 +61,6 @@ class DrqnAgent(DqnAgent):
 
         hidden_states = (self.zeros_hidden, self.zeros_hidden)
 
-        # DRQN's context length will be doubled to allow for a burn-in period
-        # so we make a new replay buffer
-        self.replay_buffer = ReplayBuffer(
-            buffer_size,
-            env_obs_length=env_obs_length,
-            obs_mask=obs_mask,
-            max_episode_steps=max_env_steps,
-            context_len=2 * context_len,
-        )
-
         self.train_context = Context(
             context_len,
             obs_mask,
@@ -84,13 +72,6 @@ class DrqnAgent(DqnAgent):
             context_len,
             obs_mask,
             num_actions,
-            env_obs_length,
-            init_hidden=hidden_states,
-        )
-        self.asym_eval_context = Context(
-            eval_context_len,
-            obs_mask,
-            self.num_actions,
             env_obs_length,
             init_hidden=hidden_states,
         )
@@ -238,12 +219,7 @@ class DrqnAgent(DqnAgent):
         self.target_min.add(targets.min().item())
 
         # Optimization step
-        if self.history:
-            loss = F.mse_loss(
-                q_values[:, self.context_len :], targets[:, self.context_len :]
-            )
-        else:
-            loss = F.mse_loss(q_values, targets)
+        loss = F.mse_loss(q_values, targets)
         self.td_errors.add(loss.item())
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()

@@ -24,6 +24,7 @@ class DRQN(DQN):
             obs_dim=obs_dim,
             num_actions=num_actions,
             embed_per_obs_dim=embed_per_obs_dim,
+            action_dim=action_dim,
             inner_embed_size=inner_embed,
             is_discrete_env=is_discrete_env,
             obs_vocab_size=obs_vocab_size,
