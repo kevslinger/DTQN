@@ -11,13 +11,12 @@ from dtqn.networks.drqn import DRQN
 from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
 from dtqn.networks.dtqn import DTQN
-from dtqn.networks.dtqn_bag import DTQNBag
 from utils import env_processing
 
 
 MODEL_MAP = {
     "DTQN": DTQN,
-    "DTQN-bag": DTQNBag,
+    "DTQN-bag": DTQN,
     "ADRQN": ADRQN,
     "DRQN": DRQN,
     "DARQN": DARQN,

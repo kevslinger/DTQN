@@ -122,11 +122,7 @@ class DTQN(nn.Module):
                 transformer_block(
                     num_heads,
                     inner_embed_size,
-                    history_len
-                    + bag_size
-                    + 1  # Need +1 for the bag eviction policy if we're using a bag
-                    if bag_size > 0
-                    else history_len,
+                    history_len,
                     dropout,
                     attn_gate,
                     mlp_gate,
@@ -135,12 +131,26 @@ class DTQN(nn.Module):
             ]
         )
 
-        self.layernorm = nn.LayerNorm(inner_embed_size)
-        self.ffn = nn.Sequential(
-            nn.Linear(inner_embed_size, inner_embed_size),
-            nn.ReLU(),
-            nn.Linear(inner_embed_size, num_actions),
-        )
+        self.bag_size = bag_size
+        self.bag_attn_weights = None
+        if bag_size > 0:
+            self.bag_attention = nn.MultiheadAttention(
+                inner_embed_size,
+                num_heads,
+                dropout=dropout,
+                batch_first=True,
+            )
+            self.ffn = nn.Sequential(
+                nn.Linear(inner_embed_size * 2, inner_embed_size),
+                nn.ReLU(),
+                nn.Linear(inner_embed_size, num_actions),
+            )
+        else:
+            self.ffn = nn.Sequential(
+                nn.Linear(inner_embed_size, inner_embed_size),
+                nn.ReLU(),
+                nn.Linear(inner_embed_size, num_actions),
+            )
 
         self.history_len = history_len
         self.apply(torch_utils.init_weights)
@@ -149,9 +159,14 @@ class DTQN(nn.Module):
         self,
         obss: torch.Tensor,
         actions: Optional[torch.Tensor] = None,
-        bag: Optional[torch.Tensor] = None,
+        bag_obss: Optional[torch.Tensor] = None,
         bag_actions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """
+        obss    is  batch x seq_len  x obs_dim
+        actions is  batch x seq_len  x       1
+        bag     is  batch x bag_size x obs_dim
+        """
         history_len = obss.size(1)
         assert (
             history_len <= self.history_len
@@ -165,7 +180,9 @@ class DTQN(nn.Module):
 
         token_embeddings = self.obs_embedding(obss)
 
+        # Just to keep shapes correct if we choose to disble including actions
         if self.action_embedding is not None:
+            # [batch x seq_len x 1] -> [batch x seq_len x action_embed]
             action_embed = self.action_embedding(actions)
 
             if history_len > 1:
@@ -174,27 +191,28 @@ class DTQN(nn.Module):
                 action_embed[:, 0, :] = 0.0
             token_embeddings = torch.concat([action_embed, token_embeddings], dim=-1)
 
-        if bag is not None:
-            bag_obs_embed = self.obs_embedding(bag)
-            bag_action_embed = self.action_embedding(bag_actions)
-            bag_embeddings = torch.concat([bag_action_embed, bag_obs_embed], dim=-1)
-            x = self.dropout(
-                torch.cat(
-                    (
-                        bag_embeddings + self.position_embedding()[:, : bag.size(1), :],
-                        token_embeddings
-                        + self.position_embedding()[
-                            :, bag.size(1) : bag.size(1) + history_len, :
-                        ],
-                    ),
-                    dim=1,
-                )
+        # [batch x seq_len x model_embed] -> [batch x seq_len x model_embed]
+        working_memory = self.transformer_layers(
+            self.dropout(
+                token_embeddings + self.position_embedding()[:, :history_len, :]
             )
+        )
+
+        if self.bag_size > 0:
+            # [batch x bag_size x action_embed] + [batch x bag_size x obs_embed] -> [batch x bag_size x model_embed]
+            if self.action_embedding is not None:
+                bag_embeddings = torch.concat(
+                    [self.action_embedding(bag_actions), self.obs_embedding(bag_obss)],
+                    dim=-1,
+                )
+            else:
+                bag_embeddings = self.obs_embedding(bag_obss)
+            # [batch x seq_len x model_embed] x [batch x bag_size x model_embed] -> [batch x seq_len x model_embed]
+            persistent_memory, self.attn_weights = self.bag_attention(
+                working_memory, bag_embeddings, bag_embeddings
+            )
+            output = self.ffn(torch.concat([working_memory, persistent_memory], dim=-1))
         else:
-            # batch_size x hist_len x obs_dim
-            x = token_embeddings + self.position_embedding()[:, :history_len, :]
-            x = self.dropout(x)
-        # Send through transformer
-        x = self.transformer_layers(x)
-        # Run through a linear layer to get to action space
-        return self.ffn(x)[:, -history_len:, :]
+            output = self.ffn(working_memory)
+
+        return output[:, -history_len:, :]
