@@ -45,7 +45,7 @@ def get_agent(
     batch_size: int,
     context_len: int,
     max_env_steps: int,
-    history: bool,
+    history: int,
     target_update_frequency: int,
     gamma: float,
     num_heads: int = 1,
@@ -69,7 +69,7 @@ def get_agent(
         batch_size: int, the batch size to use for training.
         context_len: int, the maximum sequence length to use as input to the network.
         max_env_steps: int, the maximum number of steps allowed in the environment before timeout. This will be inferred if not explicitly supplied.
-        history: bool, whether or not to use intermediate Q-value prediction.
+        history: int, the number of Q-values to use during training for each sample.
         target_update_frequency: int, the number of training steps between (hard) target network update.
         gamma: float, the discount factor.
         -DTQN-Specific-
@@ -97,6 +97,12 @@ def get_agent(
         envs[0].observation_space,
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
+    # Keep the history between 1 and context length
+    if history < 1 or history > context_len:
+        print(
+            f"History must be 1 < history <= context_len, but history is {history} and context len is {context_len}. Clipping history to {np.clip(history, 1, context_len)}..."
+        )
+        history = np.clip(history, 1, context_len)
     # All envs must share same action space
     num_actions = envs[0].action_space.n
 

@@ -131,8 +131,9 @@ def get_args():
     )
     parser.add_argument(
         "--history",
-        action="store_false",
-        help="Supplying this argument turns off intermediate q-value prediction.",
+        type=int,
+        default=50,
+        help="This is how many (intermediate) Q-values we use to train for each context. To turn off intermediate Q-value prediction, set `--history 1`. To use the entire context, set history equal to the context length.",
     )
     # DTQN-Specific
     parser.add_argument(

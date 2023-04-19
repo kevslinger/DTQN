@@ -29,7 +29,7 @@ class DrqnAgent(DqnAgent):
         grad_norm_clip: float = 1.0,
         target_update_frequency: int = 10_000,
         embed_size: int = 64,
-        history: bool = True,
+        history: int = 50,
         **kwargs,
     ):
         super().__init__(
@@ -149,67 +149,40 @@ class DrqnAgent(DqnAgent):
             obss, actions, episode_lengths=episode_lengths
         )
 
-        if self.history:
-            # After gathering, Q values becomes [batch-size x hist-len x 1], which we squeeze to [batch-size x hist-len]
-            q_values = q_values.gather(2, actions).squeeze()
-        else:
-            # After gathering, Q values becomes [batch-size x 1], which we squeeze to [batch-size]
-            q_values = q_values[:, -1, :].gather(1, actions[:, -1, :]).squeeze()
+        # After gathering, Q values becomes [batch-size x hist-len x 1], which we squeeze to [batch-size x hist-len]
+        q_values = q_values.gather(2, actions).squeeze()
 
         with torch.no_grad():
+            # Next obss goes from [batch-size x context-len x obs-len] to
+            # [batch-size x hist-len x n-actions] after forward pass, then indexed
+            # to become [batch-size x hist-len x n-actions], then argmax/squeezed to become [batch-size x hist-len]
+            argmax = torch.argmax(
+                self.policy_network(
+                    next_obss,
+                    next_actions,
+                    episode_lengths=episode_lengths,
+                )[0],
+                dim=2,
+            ).unsqueeze(-1)
+            next_obs_q_values = (
+                self.target_network(
+                    next_obss,
+                    next_actions,
+                    episode_lengths=episode_lengths,
+                )[0]
+                .gather(2, argmax)
+                .squeeze()
+            )
+            # here goes BELLMAN
+            targets = rewards.squeeze() + (1 - dones.squeeze()) * (
+                next_obs_q_values * self.gamma
+            )
 
-            if self.history:
-                # Next obss goes from [batch-size x context-len x obs-len] to
-                # [batch-size x hist-len x n-actions] after forward pass, then indexed
-                # to become [batch-size x hist-len x n-actions], then argmax/squeezed to become [batch-size x hist-len]
-                argmax = torch.argmax(
-                    self.policy_network(
-                        next_obss,
-                        next_actions,
-                        episode_lengths=episode_lengths,
-                    )[0],
-                    dim=2,
-                ).unsqueeze(-1)
-                next_obs_q_values = (
-                    self.target_network(
-                        next_obss,
-                        next_actions,
-                        episode_lengths=episode_lengths,
-                    )[0]
-                    .gather(2, argmax)
-                    .squeeze()
-                )
-                # here goes BELLMAN
-                targets = rewards.squeeze() + (1 - dones.squeeze()) * (
-                    next_obs_q_values * self.gamma
-                )
-            else:
-                # Next obss goes from [batch-size x context-len x obs-len] to
-                # [batch-size x hist-len x n-actions] after forward pass, then indexed
-                # to become [batch-size x hist-len x 1]
-                argmax = torch.argmax(
-                    self.policy_network(
-                        next_obss,
-                        next_actions,
-                        episode_lengths=episode_lengths,
-                    )[0][:, -1, :],
-                    dim=1,
-                ).unsqueeze(-1)
-                next_obs_q_values = (
-                    self.target_network(
-                        next_obss,
-                        next_actions,
-                        episode_lengths=episode_lengths,
-                    )[0][:, -1, :]
-                    .gather(1, argmax)
-                    .squeeze()
-                )
-
-                # here goes BELLMAN
-                targets = rewards[:, -1, :].squeeze() + (
-                    1 - dones[:, -1, :].squeeze()
-                ) * (next_obs_q_values * self.gamma)
-
+        q_values = q_values[:, -self.history :]
+        targets = targets[:, -self.history :]
+        # Calculate loss
+        loss = F.mse_loss(q_values, targets)
+        # Log losses
         self.qvalue_max.add(q_values.max().item())
         self.qvalue_mean.add(q_values.mean().item())
         self.qvalue_min.add(q_values.min().item())
@@ -218,9 +191,8 @@ class DrqnAgent(DqnAgent):
         self.target_mean.add(targets.mean().item())
         self.target_min.add(targets.min().item())
 
-        # Optimization step
-        loss = F.mse_loss(q_values, targets)
         self.td_errors.add(loss.item())
+        # Optimisation step
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(
@@ -228,7 +200,9 @@ class DrqnAgent(DqnAgent):
             self.grad_norm_clip,
             error_if_nonfinite=True,
         )
+        # Logging
         self.grad_norms.add(norm.item())
+
         self.optimizer.step()
         self.num_train_steps += 1
 
