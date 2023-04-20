@@ -11,12 +11,13 @@ from dtqn.networks.drqn import DRQN
 from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
 from dtqn.networks.dtqn import DTQN
+from dtqn.networks.perceiver import PerceiverIO
 from utils import env_processing
 
 
 MODEL_MAP = {
     "DTQN": DTQN,
-    "DTQN-bag": DTQN,
+    "Perceiver": PerceiverIO,
     "ADRQN": ADRQN,
     "DRQN": DRQN,
     "DARQN": DARQN,
@@ -25,7 +26,7 @@ MODEL_MAP = {
 
 AGENT_MAP = {
     "DTQN": DtqnAgent,
-    "DTQN-bag": DtqnAgent,
+    "Perceiver": DtqnAgent,
     "ADRQN": DrqnAgent,
     "DRQN": DrqnAgent,
     "DARQN": DrqnAgent,
@@ -139,11 +140,32 @@ def get_agent(
             pos=pos,
             discrete=is_discrete_env,
             vocab_sizes=obs_vocab_size,
-            target_update_frequency=target_update_frequency,
             bag_size=bag_size,
         ).to(device)
+    
+    def make_perceiver(network_cls):
+        """Creates Perceiver"""
+        return lambda: network_cls(
+            env_obs_length,
+            num_actions,
+            embed_per_obs_dim,
+            action_dim,
+            inner_embed,
+            num_heads,
+            num_layers,
+            context_len,
+            15,
+            inner_embed,
+            context_len,
+            pos=pos,
+            discrete=is_discrete_env,
+            vocab_sizes=obs_vocab_size,
+            dropout=dropout
+        ).to(device)
 
-    if "DTQN" not in model_str:
+    if model_str == "Perceiver":
+        network_factory = make_perceiver(MODEL_MAP[model_str])
+    elif "DTQN" not in model_str:
         network_factory = make_model(MODEL_MAP[model_str])
     else:
         network_factory = make_dtqn(MODEL_MAP[model_str])
