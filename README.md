@@ -2,6 +2,10 @@
 
 Deep Transformer Q-Network (DTQN) is an extension of [DQN](https://www.nature.com/articles/nature14236) and [DRQN](https://arxiv.org/abs/1507.06527) designed to encode an agent's history effectively for solving partially observable reinforcement learning tasks.
 Our architecture is built from a Transformer Decoder (like [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)).
+DTQN is a sequence-to-sequence model; that is, given a history of the agent's interactions (either observation or action-observation) with the environment, DTQN outputs a sequence of Q-values.
+Each element in the output sequence represents the Q-values for each action, given the agent's history up to that point.
+For instance, the 3rd vector of Q-values was generated based on only the first three interactions between the agent and the environment.
+This method allows us to train much more efficiently than a Sequence-to-One method, since we get `Sequence` more data points to use for training.
 Our results providence strong evidence indicating a transformer can solve partially observable domains faster than previous recurrent approaches.
 Our paper is now publicly available on arXiv! 
 You can read it [here](https://arxiv.org/abs/2206.01078).
@@ -122,7 +126,7 @@ In our paper, we run our experiments with random seeds 1, 2, 3, 4, 5.
 
 ### Experiment Argument Details
 
-We use [weights and biases](https://wandb.ai) to log out results.
+We use [weights and biases](https://wandb.ai) to log our results.
 If you do not have a weights and biases account, we recommend you get one!
 However, if you still do not want to use weights and biases, you can use the `--disable-wandb` flag.
 Then your results will be stored to a CSV file in `policies/<project_name>/<env>/<config>.csv`.
@@ -130,6 +134,43 @@ Then your results will be stored to a CSV file in `policies/<project_name>/<env>
 If you do not have access to a gpu, set `--device cpu` to train on CPU.
 
 If you want command line outputs to view training results, use `--verbose`.
+
+| Argument | Description |
+| -------- | ----------- |
+| `--project-name` | The project name (for wandb) or directory name (for local logging) to store the results. |
+| `--disable-wandb` | Use `--disable-wandb` to log locally. |
+| `--time-limit` | Time limit allowed for job. Useful for some cluster jobs such as slurm. |
+| `--model` | Network model to use. |
+| `--envs` | Domain to use. You can supply multiple domains, but they must have the same observation and action space. With multiple environments, the agent will sample a new one on each episode reset for conducting policy rollouts and collection experience. During evaluation, it will perform the same evaluation for each domain (Note: this may significantly slow down your run! Consider increasing the eval-frequency or reducing the eval-episodes). |
+| `--num-steps` | Number of steps to train the agent. |
+| `--tuf` | How many steps between each (hard) target network update. |
+| `--lr` | Learning rate for the optimizer. |
+| `--batch` | Batch size. |
+| `--buf-size` | Number of timesteps to store in replay buffer. Note that we store the max length episodes given by the environment, so episodes that take longer will be padded at the end. This does not affect training but may affect the number of real observations in the buffer. |
+| `--eval-frequency` | How many training timesteps between agent evaluations. |
+| `--eval-episodes` | Number of episodes for each evaluation period. |
+| `--device` | Pytorch device to use. |
+| `--context` | For DRQN and DTQN, the context length to use to train the network. |
+| `--obs-embed` | For discrete observation domains only. The number of features to give each observation. |
+| `--a-embed` | The number of features to give each action. A value of 0 will prevent the policy from using the previous action. |
+| `--in-embed` | The dimensionality of the network. In the transformer, this is referred to as `d_model`. |
+| `--max-episode-steps` | The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will be inferred. Otherwise, this argument must be supplied. |
+| `--seed` | The random seed to use. |
+| `--save-policy` | Use this to save the policy so you can load it later for rendering. |
+| `--verbose` | Print out evaluation results as they come in to the console. |
+| `--render` | Enjoy mode (NOTE: must have a trained policy saved). |
+| `--history` | This is how many (intermediate) Q-values we use to train for each context. To turn off intermediate Q-value prediction, set `--history 1`. To use the entire context, set history equal to the context length. |
+| `--heads` | Number of heads to use for the transformer. |
+| `--layers` | Number of transformer blocks to use for the transformer. |
+| `--dropout` | Dropout probability. |
+| `--discount` | Discount factor. |
+| `--gate` | Combine step to use. |
+| `--identity` | Whether or not to use identity map reordering. |
+| `--pos` | The type of positional encodings to use. |
+| `--bag-size` | The size of the persistent memory bag. |
+| `--slurm-job-id` | The `$SLURM_JOB_ID` assigned to this job. |
+| |
+
 
 ### Ablations
 

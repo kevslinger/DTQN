@@ -178,7 +178,7 @@ def get_args():
         "--slurm-job-id",
         default=0,
         type=str,
-        help="The `$SLURM_JOB_ID` assigned to this job",
+        help="The `$SLURM_JOB_ID` assigned to this job.",
     )
 
     return parser.parse_args()
