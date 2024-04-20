@@ -112,13 +112,13 @@ If you want to change the environment, use the `--envs` flag.
 You can add multiple `envs` as long as they share the same observation and action space. 
 In that case, the agent will collect data with policy rollouts by randomly sampling one of the provided envs.
 During evaluation, it will evaluate the policy separately on each environment, and record the results for each domain separately.
-To reproduce our results, you may need to change the `inembed` flag as well.
-For `POMDP-hallway-episodic-v0`, `POMDP-heavenhell_3-episodic-v0`, and `DiscreteCarFlag-v0` domains, we used `--inembed 64`.
-For all others tasks, we use `--inembed 128`.
+To reproduce our results, you may need to change the `in-embed` flag as well.
+For `POMDP-hallway-episodic-v0`, `POMDP-heavenhell_3-episodic-v0`, and `DiscreteCarFlag-v0` domains, we used `--in-embed 64`.
+For all others tasks, we use `--in-embed 128`.
 For instance, to reproduce our Gridverse memory 7x7 experiment, you can use the command:
 
 ```shell
-python run.py --envs gv_memory.7x7.yaml --inembed 128
+python run.py --envs gv_memory.7x7.yaml --in-embed 128
 ```
 
 Which will run for 2,000,000 timesteps.
