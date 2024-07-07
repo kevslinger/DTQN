@@ -4,15 +4,15 @@ import numpy as np
 from numpy.random import Generator
 import gym
 from gym import spaces
-from typing import Optional
-
-# from pyglet.canvas.xlib import NoSuchDisplayException
+from pyglet.canvas.xlib import NoSuchDisplayException
 
 # Running on slurm
-# try:
-#     from gym.utils import pyglet_rendering as visualize
-# except:
-#     pass
+try:
+    from gym.envs.classic_control import rendering as visualize
+except NoSuchDisplayException:
+    pass
+except ImportError:
+    pass
 
 
 class CarFlag(gym.Env):
